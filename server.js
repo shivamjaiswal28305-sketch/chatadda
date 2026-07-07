@@ -13,7 +13,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 // TEMP DEBUG ROUTE
 app.get('/debug', (req, res) => {
   try {
-    res.json({ dirname: __dirname, files: fs.readdirSync(__dirname) });
+    res.json({
+      dirname: __dirname,
+      files: fs.readdirSync(__dirname),
+      publicFiles: fs.readdirSync(path.join(__dirname, 'public'))
+    });
   } catch (e) {
     res.send('ERROR: ' + e.message);
   }
@@ -59,14 +63,12 @@ function saveReport(entry) {
 io.on('connection', (socket) => {
   console.log('New connection:', socket.id);
 
-  // When user joins with a username
   socket.on('join', (username) => {
     username = String(username).trim().slice(0, 20);
     if (!username) {
       username = 'Guest' + Math.floor(Math.random() * 1000);
     }
 
-    // Prevent duplicate usernames
     const existingNames = Object.values(onlineUsers);
     let finalName = username;
     let counter = 1;
@@ -78,15 +80,12 @@ io.on('connection', (socket) => {
     onlineUsers[socket.id] = finalName;
     socket.username = finalName;
 
-    // Tell the user their final assigned name
     socket.emit('joined', finalName);
 
-    // Notify everyone
     io.emit('system', `${finalName} chat me aa gaye 👋`);
     io.emit('userList', Object.values(onlineUsers));
   });
 
-  // Public chat message
   socket.on('chatMessage', (msg) => {
     if (!socket.username) return;
     const text = cleanMessage(String(msg).slice(0, 500));
@@ -97,7 +96,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Private 1-on-1 message
   socket.on('privateMessage', ({ toUsername, text }) => {
     if (!socket.username || !toUsername) return;
     const cleanText = cleanMessage(String(text).slice(0, 500));
@@ -109,23 +107,19 @@ io.on('connection', (socket) => {
       time
     };
 
-    // Send to receiver if they're online
     const targetId = findSocketIdByUsername(toUsername);
     if (targetId) {
       io.to(targetId).emit('privateMessage', payload);
     }
-    // Echo back to sender so their own screen shows it too
     socket.emit('privateMessage', payload);
   });
 
-  // Typing indicator (public room)
   socket.on('typing', () => {
     if (socket.username) {
       socket.broadcast.emit('typing', socket.username);
     }
   });
 
-  // Typing indicator (private chat)
   socket.on('privateTyping', (toUsername) => {
     const targetId = findSocketIdByUsername(toUsername);
     if (targetId && socket.username) {
@@ -133,7 +127,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Report a user
   socket.on('reportUser', ({ reportedUsername, reason }) => {
     if (!socket.username) return;
     const entry = {
@@ -147,7 +140,6 @@ io.on('connection', (socket) => {
     socket.emit('reportReceived', reportedUsername);
   });
 
-  // ---------- WebRTC call signaling (server sirf messages relay karta hai) ----------
   socket.on('callOffer', ({ toUsername, offer, callType }) => {
     const targetId = findSocketIdByUsername(toUsername);
     if (targetId && socket.username) {
@@ -164,31 +156,4 @@ io.on('connection', (socket) => {
 
   socket.on('iceCandidate', ({ toUsername, candidate }) => {
     const targetId = findSocketIdByUsername(toUsername);
-    if (targetId) io.to(targetId).emit('iceCandidate', { fromUsername: socket.username, candidate });
-  });
-
-  socket.on('callReject', ({ toUsername }) => {
-    const targetId = findSocketIdByUsername(toUsername);
-    if (targetId) io.to(targetId).emit('callReject', { fromUsername: socket.username });
-  });
-
-  socket.on('callEnd', ({ toUsername }) => {
-    const targetId = findSocketIdByUsername(toUsername);
-    if (targetId) io.to(targetId).emit('callEnd', { fromUsername: socket.username });
-  });
-
-  socket.on('disconnect', () => {
-    if (socket.username) {
-      io.emit('system', `${socket.username} chale gaye 👋`);
-      // Agar ye user kisi call me tha to doosre party ko bata do
-      io.emit('callEnd', { fromUsername: socket.username });
-      delete onlineUsers[socket.id];
-      io.emit('userList', Object.values(onlineUsers));
-    }
-  });
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server chal raha hai: http://localhost:${PORT}`);
-});
+    if (targetId) io.to(targetId).emit('iceCandidate', { fromUsernam

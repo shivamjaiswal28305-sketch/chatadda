@@ -1,0 +1,53 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bubbleOrange" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff8a5c"/>
+      <stop offset="100%" stop-color="#e2492a"/>
+    </linearGradient>
+    <linearGradient id="bubbleGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffe08a"/>
+      <stop offset="100%" stop-color="#ffb238"/>
+    </linearGradient>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2f1c3d"/>
+      <stop offset="100%" stop-color="#1b1023"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background badge -->
+  <circle cx="100" cy="100" r="98" fill="url(#bgGrad)"/>
+
+  <!-- Steam rising -->
+  <g stroke="#ffd166" stroke-width="4" stroke-linecap="round" fill="none" opacity="0.85">
+    <path d="M78 46 C 74 38, 84 34, 80 26">
+      <animate attributeName="d"
+        values="M78 46 C 74 38, 84 34, 80 26;
+                M78 46 C 82 38, 72 34, 78 26;
+                M78 46 C 74 38, 84 34, 80 26"
+        dur="3s" repeatCount="indefinite"/>
+    </path>
+    <path d="M96 44 C 92 36, 102 32, 98 22">
+      <animate attributeName="d"
+        values="M96 44 C 92 36, 102 32, 98 22;
+                M96 44 C 100 36, 90 32, 96 22;
+                M96 44 C 92 36, 102 32, 98 22"
+        dur="3s" begin="0.5s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- Back speech bubble (gold, "listener") -->
+  <g>
+    <rect x="96" y="92" width="70" height="52" rx="20" fill="url(#bubbleGold)"/>
+    <path d="M108 140 L100 156 L122 142 Z" fill="url(#bubbleGold)"/>
+  </g>
+
+  <!-- Front speech bubble (orange, "speaker") -->
+  <g>
+    <rect x="30" y="56" width="98" height="70" rx="26" fill="url(#bubbleOrange)"/>
+    <path d="M56 122 L44 144 L74 126 Z" fill="url(#bubbleOrange)"/>
+    <!-- three dots = "typing" -->
+    <circle cx="60" cy="91" r="6" fill="#2a0e04"/>
+    <circle cx="79" cy="91" r="6" fill="#2a0e04"/>
+    <circle cx="98" cy="91" r="6" fill="#2a0e04"/>
+  </g>
+</svg>

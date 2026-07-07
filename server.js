@@ -12,11 +12,17 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/debug', (req, res) => {
   try {
-    res.json({
-      dirname: __dirname,
-      files: fs.readdirSync(__dirname),
-      publicFiles: fs.readdirSync(path.join(__dirname, 'public'))
-    });
+    const entries = fs.readdirSync(__dirname, { withFileTypes: true });
+    const publicEntry = entries.find(e => e.name.includes('public'));
+    let details = 'not found';
+    if (publicEntry) {
+      details = {
+        name: publicEntry.name,
+        isDirectory: publicEntry.isDirectory(),
+        charCodes: [...publicEntry.name].map(c => c.charCodeAt(0))
+      };
+    }
+    res.json({ dirname: __dirname, allEntries: entries.map(e => e.name), publicEntryDetails: details });
   } catch (e) {
     res.send('ERROR: ' + e.message);
   }

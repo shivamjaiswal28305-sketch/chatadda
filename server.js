@@ -10,7 +10,6 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// TEMP DEBUG ROUTE
 app.get('/debug', (req, res) => {
   try {
     res.json({
@@ -23,10 +22,8 @@ app.get('/debug', (req, res) => {
   }
 });
 
-// Track online users: socket.id -> username
 const onlineUsers = {};
 
-// Simple bad-words filter (add more words as needed)
 const blockedWords = ['badword1', 'badword2'];
 function cleanMessage(msg) {
   let clean = msg;
@@ -41,7 +38,6 @@ function findSocketIdByUsername(username) {
   return Object.keys(onlineUsers).find(id => onlineUsers[id] === username);
 }
 
-// Reports get appended to reports.json (simple file-based log, no database needed)
 const reportsFile = path.join(__dirname, 'reports.json');
 function saveReport(entry) {
   let reports = [];
@@ -68,7 +64,6 @@ io.on('connection', (socket) => {
     if (!username) {
       username = 'Guest' + Math.floor(Math.random() * 1000);
     }
-
     const existingNames = Object.values(onlineUsers);
     let finalName = username;
     let counter = 1;
@@ -76,13 +71,10 @@ io.on('connection', (socket) => {
       finalName = `${username}${counter}`;
       counter++;
     }
-
     onlineUsers[socket.id] = finalName;
     socket.username = finalName;
-
     socket.emit('joined', finalName);
-
-    io.emit('system', `${finalName} chat me aa gaye 👋`);
+    io.emit('system', `${finalName} chat me aa gaye`);
     io.emit('userList', Object.values(onlineUsers));
   });
 
@@ -94,37 +86,23 @@ io.on('connection', (socket) => {
       text,
       time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
     });
-  });
-
-  socket.on('privateMessage', ({ toUsername, text }) => {
+  });socket.on('privateMessage', ({ toUsername, text }) => {
     if (!socket.username || !toUsername) return;
     const cleanText = cleanMessage(String(text).slice(0, 500));
     const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-    const payload = {
-      from: socket.username,
-      to: toUsername,
-      text: cleanText,
-      time
-    };
-
+    const payload = { from: socket.username, to: toUsername, text: cleanText, time };
     const targetId = findSocketIdByUsername(toUsername);
-    if (targetId) {
-      io.to(targetId).emit('privateMessage', payload);
-    }
+    if (targetId) io.to(targetId).emit('privateMessage', payload);
     socket.emit('privateMessage', payload);
   });
 
   socket.on('typing', () => {
-    if (socket.username) {
-      socket.broadcast.emit('typing', socket.username);
-    }
+    if (socket.username) socket.broadcast.emit('typing', socket.username);
   });
 
   socket.on('privateTyping', (toUsername) => {
     const targetId = findSocketIdByUsername(toUsername);
-    if (targetId && socket.username) {
-      io.to(targetId).emit('privateTyping', socket.username);
-    }
+    if (targetId && socket.username) io.to(targetId).emit('privateTyping', socket.username);
   });
 
   socket.on('reportUser', ({ reportedUsername, reason }) => {
@@ -156,4 +134,30 @@ io.on('connection', (socket) => {
 
   socket.on('iceCandidate', ({ toUsername, candidate }) => {
     const targetId = findSocketIdByUsername(toUsername);
-    if (targetId) io.to(targetId).emit('iceCandidate', { fromUsernam
+    if (targetId) io.to(targetId).emit('iceCandidate', { fromUsername: socket.username, candidate });
+  });
+
+  socket.on('callReject', ({ toUsername }) => {
+    const targetId = findSocketIdByUsername(toUsername);
+    if (targetId) io.to(targetId).emit('callReject', { fromUsername: socket.username });
+  });
+
+  socket.on('callEnd', ({ toUsername }) => {
+    const targetId = findSocketIdByUsername(toUsername);
+    if (targetId) io.to(targetId).emit('callEnd', { fromUsername: socket.username });
+  });
+
+  socket.on('disconnect', () => {
+    if (socket.username) {
+      io.emit('system', `${socket.username} chale gaye`);
+      io.emit('callEnd', { fromUsername: socket.username });
+      delete onlineUsers[socket.id];
+      io.emit('userList', Object.values(onlineUsers));
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server chal raha hai: http://localhost:${PORT}`);
+});

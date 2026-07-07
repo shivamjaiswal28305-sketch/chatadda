@@ -10,6 +10,7 @@ const io = new Server(server);
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/test', (req, res) => res.send('working'));
+app.get('/debug', (req, res) => { try { res.send(JSON.stringify(fs.readdirSync(path.join(__dirname, 'public')))); } catch(e) { res.send('ERROR: ' + e.message); } });
 // Track online users: socket.id -> username
 const onlineUsers = {};
 

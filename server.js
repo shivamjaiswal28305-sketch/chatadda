@@ -8,25 +8,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.get('/debug', (req, res) => {
-  try {
-    const entries = fs.readdirSync(__dirname, { withFileTypes: true });
-    const publicEntry = entries.find(e => e.name.includes('public'));
-    let details = 'not found';
-    if (publicEntry) {
-      details = {
-        name: publicEntry.name,
-        isDirectory: publicEntry.isDirectory(),
-        charCodes: [...publicEntry.name].map(c => c.charCodeAt(0))
-      };
-    }
-    res.json({ dirname: __dirname, allEntries: entries.map(e => e.name), publicEntryDetails: details });
-  } catch (e) {
-    res.send('ERROR: ' + e.message);
-  }
-});
+// Public folder ko dhoondo, chahe uske naam me koi invisible character ho
+const publicDirName = fs.readdirSync(__dirname, { withFileTypes: true })
+  .find(e => e.isDirectory() && e.name.replace(/[^\x20-\x7E]/g, '') === 'public')?.name || 'public';
+app.use(express.static(path.join(__dirname, publicDirName)));
 
 const onlineUsers = {};
 
@@ -92,7 +77,9 @@ io.on('connection', (socket) => {
       text,
       time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
     });
-  });socket.on('privateMessage', ({ toUsername, text }) => {
+  });
+
+  socket.on('privateMessage', ({ toUsername, text }) => {
     if (!socket.username || !toUsername) return;
     const cleanText = cleanMessage(String(text).slice(0, 500));
     const time = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });

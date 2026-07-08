@@ -12,6 +12,7 @@ const io = new Server(server);
 const publicDirName = fs.readdirSync(__dirname, { withFileTypes: true })
   .find(e => e.isDirectory() && e.name.replace(/[^\x20-\x7E]/g, '') === 'public')?.name || 'public';
 app.use(express.static(path.join(__dirname, publicDirName)));
+app.get('/debug2', (req, res) => res.json({ publicDirName, exists: fs.existsSync(path.join(__dirname, publicDirName)) }));
 
 const onlineUsers = {};
 

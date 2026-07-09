@@ -592,4 +592,60 @@ button:focus-visible, input:focus-visible {
 
 @media (max-width: 720px) {
   #localVideo { width: 90px; height: 120px; }
+}/* ---- TELEGRAM-STYLE HEADER REDESIGN ---- */
+.chat-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: nowrap !important;
+  padding: 12px 14px !important;
+  gap: 10px !important;
+  width: 100% !important;
+}
+
+.header-title {
+  flex: 1 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+.chat-actions {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  gap: 6px !important;
+  margin-left: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.action-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 40px !important;
+  height: 40px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  font-size: 17px !important;
+  white-space: nowrap !important;
+}
+
+/* Text labels (Call/Video/Block/Report) ko chhupao, sirf icon dikhao - Telegram jaisa */
+.action-btn {
+  font-size: 0 !important;
+}
+.action-btn::before {
+  font-size: 17px !important;
+}
+#audioCallBtn::before { content: '🎤'; }
+#videoCallBtn::before { content: '📹'; }
+#blockBtn::before { content: '🚫'; }
+#reportBtn::before { content: '⚠️'; }
+
+.typing-indicator {
+  position: absolute !important;
+  bottom: 4px !important;
+  left: 60px !important;
+  font-size: 11px !important;
 }

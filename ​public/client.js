@@ -1,8 +1,21 @@
+// ==================== FIREBASE (Google Sign-In) ====================
+const firebaseConfig = {
+  apiKey: "AIzaSyDyDE41Dv-dovnAHGIhYr2WWDjTRhlFcIg",
+  authDomain: "chatadda-cfd71.firebaseapp.com",
+  projectId: "chatadda-cfd71",
+  storageBucket: "chatadda-cfd71.firebasestorage.app",
+  messagingSenderId: "840594705972",
+  appId: "1:840594705972:web:673d5d74dc677b08c28461"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+
 const socket = io();
 
 const joinScreen = document.getElementById('joinScreen');
 const chatScreen = document.getElementById('chatScreen');
-const usernameInput = document.getElementById('usernameInput');
+const googleSignInBtn = document.getElementById('googleSignInBtn');
+const signedInAs = document.getElementById('signedInAs');
 const joinBtn = document.getElementById('joinBtn');
 const messagesEl = document.getElementById('messages');
 const messageForm = document.getElementById('messageForm');
@@ -18,32 +31,40 @@ const blockBtn = document.getElementById('blockBtn');
 const reportBtn = document.getElementById('reportBtn');
 
 let myUsername = '';
-let currentChat = 'public'; // 'public' or a username for private chat
+let currentChat = 'public';
 let onlineUsernames = [];
+let googleUser = null;
 
-// conversation histories kept in memory: { public: [...], "username": [...] }
 const conversations = { public: [] };
 
-// Blocked users saved in localStorage so it persists across refresh in this browser
 let blockedUsers = new Set(JSON.parse(localStorage.getItem('chatadda_blocked') || '[]'));
 
 function saveBlocked() {
   localStorage.setItem('chatadda_blocked', JSON.stringify([...blockedUsers]));
 }
 
+// ---- Google Sign-In ----
+googleSignInBtn.addEventListener('click', () => {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider)
+    .then((result) => {
+      googleUser = result.user;
+      googleSignInBtn.classList.add('hidden');
+      signedInAs.textContent = `Sign in ho gaye: ${googleUser.displayName}`;
+      signedInAs.classList.remove('hidden');
+      joinBtn.classList.remove('hidden');
+    })
+    .catch((err) => {
+      alert('Sign-in fail hua: ' + err.message);
+    });
+});
+
 function joinChat() {
-  const name = usernameInput.value.trim();
-  if (!name) {
-    usernameInput.focus();
-    return;
-  }
-  socket.emit('join', name);
+  if (!googleUser) return;
+  socket.emit('join', googleUser.displayName);
 }
 
 joinBtn.addEventListener('click', joinChat);
-usernameInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') joinChat();
-});
 
 socket.on('joined', (finalName) => {
   myUsername = finalName;
@@ -85,6 +106,7 @@ function switchToChat(target) {
   renderMessages();
   if (window.innerWidth <= 720) sidebar.classList.remove('open');
   messageInput.focus();
+  updateCallButtonsVisibility();
 }
 
 publicRoomBtn.addEventListener('click', () => switchToChat('public'));
@@ -124,7 +146,7 @@ socket.on('system', (text) => {
 });
 
 socket.on('chatMessage', (data) => {
-  if (blockedUsers.has(data.username)) return; // blocked user's public messages are hidden
+  if (blockedUsers.has(data.username)) return;
   conversations.public.push(data);
   if (currentChat === 'public') {
     appendMessageToDOM(data);
@@ -206,7 +228,7 @@ blockBtn.addEventListener('click', () => {
 reportBtn.addEventListener('click', () => {
   if (currentChat === 'public') return;
   const reason = window.prompt(`${currentChat} ko report karne ki wajah likho (optional):`, '');
-  if (reason === null) return; // cancelled
+  if (reason === null) return;
   socket.emit('reportUser', { reportedUsername: currentChat, reason });
 });
 
@@ -251,10 +273,10 @@ const callTimer = document.getElementById('callTimer');
 const toggleMicBtn = document.getElementById('toggleMicBtn');
 const toggleCamBtn = document.getElementById('toggleCamBtn');
 const endCallBtn = document.getElementById('endCallBtn');
+const filterBar = document.getElementById('filterBar');
+const filterCanvas = document.getElementById('filterCanvas');
+const filterCtx = filterCanvas.getContext('2d');
 
-// Free public STUN server (helps most home/mobile networks connect directly).
-// Kuch strict networks (college/office wifi, some mobile carriers) ko TURN server
-// chahiye hota hai jo free me reliably available nahi hai — README me note hai.
 const rtcConfig = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -263,27 +285,76 @@ const rtcConfig = {
 };
 
 let peerConnection = null;
-let localStream = null;
+let rawLocalStream = null;   // raw camera+mic
+let localStream = null;      // stream actually sent over the call (filtered for video)
 let currentCallWith = null;
-let currentCallType = null; // 'audio' or 'video'
+let currentCallType = null;
 let callTimerInterval = null;
 let callSeconds = 0;
 let pendingIncomingOffer = null;
 let micOn = true;
 let camOn = true;
 
+// ---- Instagram-style filters (CSS filter syntax works inside canvas 2D context too) ----
+const FILTERS = {
+  none: 'none',
+  clarendon: 'contrast(1.2) saturate(1.35) brightness(1.05)',
+  juno: 'sepia(0.15) saturate(1.4) contrast(1.1) brightness(1.05)',
+  lark: 'brightness(1.1) saturate(1.1) contrast(0.95)',
+  gingham: 'brightness(1.05) sepia(0.1) contrast(0.9) saturate(0.85)',
+  moon: 'grayscale(1) contrast(1.1) brightness(1.05)'
+};
+let currentFilter = 'none';
+let filterRAF = null;
+const hiddenSourceVideo = document.createElement('video');
+hiddenSourceVideo.muted = true;
+hiddenSourceVideo.playsInline = true;
+
+function startFilterProcessing(rawStream) {
+  hiddenSourceVideo.srcObject = rawStream;
+  hiddenSourceVideo.play().catch(() => {});
+
+  filterCanvas.width = 480;
+  filterCanvas.height = 640;
+
+  function drawFrame() {
+    if (camOn && hiddenSourceVideo.readyState >= 2) {
+      filterCtx.filter = FILTERS[currentFilter] || 'none';
+      filterCtx.drawImage(hiddenSourceVideo, 0, 0, filterCanvas.width, filterCanvas.height);
+    } else {
+      filterCtx.filter = 'none';
+      filterCtx.fillStyle = '#000';
+      filterCtx.fillRect(0, 0, filterCanvas.width, filterCanvas.height);
+    }
+    filterRAF = requestAnimationFrame(drawFrame);
+  }
+  drawFrame();
+
+  const canvasStream = filterCanvas.captureStream(30);
+  const audioTrack = rawStream.getAudioTracks()[0];
+  if (audioTrack) canvasStream.addTrack(audioTrack);
+  return canvasStream;
+}
+
+function stopFilterProcessing() {
+  if (filterRAF) cancelAnimationFrame(filterRAF);
+  filterRAF = null;
+  hiddenSourceVideo.srcObject = null;
+}
+
+filterBar.querySelectorAll('.filter-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    currentFilter = btn.dataset.filter;
+    filterBar.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
 function updateCallButtonsVisibility() {
   const showButtons = currentChat !== 'public' && !blockedUsers.has(currentChat);
   audioCallBtn.classList.toggle('hidden', !showButtons);
   videoCallBtn.classList.toggle('hidden', !showButtons);
 }
-
-// Hook into existing switchToChat by wrapping it
-const _originalSwitchToChat = switchToChat;
-switchToChat = function (target) {
-  _originalSwitchToChat(target);
-  updateCallButtonsVisibility();
-};
 
 audioCallBtn.addEventListener('click', () => startCall('audio'));
 videoCallBtn.addEventListener('click', () => startCall('video'));
@@ -298,7 +369,7 @@ async function startCall(type) {
   currentCallType = type;
 
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({
+    rawLocalStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
       video: type === 'video'
     });
@@ -307,6 +378,8 @@ async function startCall(type) {
     currentCallWith = null;
     return;
   }
+
+  localStream = type === 'video' ? startFilterProcessing(rawLocalStream) : rawLocalStream;
 
   setupPeerConnection();
   localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
@@ -340,7 +413,6 @@ function setupPeerConnection() {
 
 socket.on('callOffer', ({ fromUsername, offer, callType }) => {
   if (peerConnection || pendingIncomingOffer) {
-    // Already busy on a call, auto-reject
     socket.emit('callReject', { toUsername: fromUsername });
     return;
   }
@@ -359,7 +431,7 @@ acceptCallBtn.addEventListener('click', async () => {
   currentCallType = callType;
 
   try {
-    localStream = await navigator.mediaDevices.getUserMedia({
+    rawLocalStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
       video: callType === 'video'
     });
@@ -369,6 +441,8 @@ acceptCallBtn.addEventListener('click', async () => {
     pendingIncomingOffer = null;
     return;
   }
+
+  localStream = callType === 'video' ? startFilterProcessing(rawLocalStream) : rawLocalStream;
 
   setupPeerConnection();
   localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
@@ -432,10 +506,12 @@ function openCallUI() {
   if (currentCallType === 'video') {
     videoGrid.classList.remove('hidden');
     audioCallVisual.classList.add('hidden');
+    filterBar.classList.remove('hidden');
     localVideo.srcObject = localStream;
   } else {
     videoGrid.classList.add('hidden');
     audioCallVisual.classList.remove('hidden');
+    filterBar.classList.add('hidden');
   }
 
   callSeconds = 0;
@@ -460,10 +536,12 @@ function cleanupCall() {
     peerConnection.close();
     peerConnection = null;
   }
-  if (localStream) {
-    localStream.getTracks().forEach((t) => t.stop());
-    localStream = null;
+  stopFilterProcessing();
+  if (rawLocalStream) {
+    rawLocalStream.getTracks().forEach((t) => t.stop());
+    rawLocalStream = null;
   }
+  localStream = null;
   remoteVideo.srcObject = null;
   localVideo.srcObject = null;
   activeCallOverlay.classList.add('hidden');
@@ -474,6 +552,9 @@ function cleanupCall() {
   currentCallType = null;
   micOn = true;
   camOn = true;
+  currentFilter = 'none';
+  filterBar.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
+  filterBar.querySelector('[data-filter="none"]').classList.add('active');
   toggleMicBtn.textContent = '🎤';
   toggleMicBtn.classList.remove('muted');
   toggleCamBtn.textContent = '📹';
@@ -483,20 +564,18 @@ function cleanupCall() {
 endCallBtn.addEventListener('click', () => endCall(true));
 
 toggleMicBtn.addEventListener('click', () => {
-  if (!localStream) return;
+  if (!rawLocalStream) return;
   micOn = !micOn;
-  localStream.getAudioTracks().forEach((t) => (t.enabled = micOn));
+  rawLocalStream.getAudioTracks().forEach((t) => (t.enabled = micOn));
   toggleMicBtn.textContent = micOn ? '🎤' : '🔇';
   toggleMicBtn.classList.toggle('muted', !micOn);
 });
 
 toggleCamBtn.addEventListener('click', () => {
-  if (!localStream || currentCallType !== 'video') return;
+  if (currentCallType !== 'video') return;
   camOn = !camOn;
-  localStream.getVideoTracks().forEach((t) => (t.enabled = camOn));
   toggleCamBtn.textContent = camOn ? '📹' : '🚫';
   toggleCamBtn.classList.toggle('muted', !camOn);
 });
 
-// Agar current chat khud badal jaye to call buttons update ho
 updateCallButtonsVisibility();

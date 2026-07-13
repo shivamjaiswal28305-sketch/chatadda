@@ -2,7 +2,7 @@
 <html lang="hi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChatAdda — Free Live Chat, Video & Voice Call</title>
 <meta name="description" content="ChatAdda par bina login ke free real-time chat karo — public chat room, private messaging, aur audio/video calling. Bas username daalo aur baat shuru karo.">
 <meta name="keywords" content="free chat website, live chat, video call online, random chat, ladke ladki chat, chatadda">
@@ -13,6 +13,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 </head>
 <body>
 
@@ -25,8 +27,9 @@
       <img src="logo.svg" alt="ChatAdda logo" class="brand-logo" width="72" height="72">
       <h1>Chat<span>Adda</span></h1>
       <p class="tagline">Wahi chai-tapri wali baat — bas yahan chat pe. Naam daalo, adde pe aa jao.</p>
-      <input id="usernameInput" type="text" placeholder="Apna naam likho..." maxlength="20" autocomplete="off">
-      <button id="joinBtn">Adde pe chalo →</button>
+      <button id="googleSignInBtn" class="google-btn">Google se Sign in karo</button>
+      <p id="signedInAs" class="hidden signed-in-as"></p>
+      <button id="joinBtn" class="hidden">Adde pe chalo →</button>
       <p class="hint">Apna real naam, phone number, address kisi ajnabi ko na do. Suraksha aapke haath me hai.</p>
     </div>
   </div>
@@ -95,6 +98,15 @@
       <div class="audio-avatar"></div>
       <p>Audio call chal rahi hai...</p>
     </div>
+    <div id="filterBar" class="filter-bar hidden">
+      <button class="filter-btn active" data-filter="none">Normal</button>
+      <button class="filter-btn" data-filter="clarendon">Clarendon</button>
+      <button class="filter-btn" data-filter="juno">Juno</button>
+      <button class="filter-btn" data-filter="lark">Lark</button>
+      <button class="filter-btn" data-filter="gingham">Gingham</button>
+      <button class="filter-btn" data-filter="moon">Moon</button>
+    </div>
+    <canvas id="filterCanvas" style="display:none;"></canvas>
     <div class="call-controls">
       <button id="toggleMicBtn" class="call-control-btn">🎤</button>
       <button id="toggleCamBtn" class="call-control-btn">📹</button>
@@ -105,4 +117,4 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
 </body>
-</html>
+        </html>

@@ -46,14 +46,13 @@ function saveBlocked() {
 // ---- Google Sign-In ----
 googleSignInBtn.addEventListener('click', () => {
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithRedirect(provider);
+  auth.signInWithPopup(provider).catch((err) => {
+    console.error('Sign-in error:', err);
+    alert('Sign-in fail hua: ' + err.message);
+  });
 });
 
-// Redirect ke baad koi error aaye to yahan pakdo (result khud onAuthStateChanged handle karega)
-auth.getRedirectResult().catch((err) => {
-  console.error('Redirect sign-in error:', err);
-  alert('Sign-in fail hua: ' + err.message);
-});
+
 
 // Yahi asli source of truth hai — page load / redirect / refresh sabme session ye pakad lega
 auth.onAuthStateChanged((user) => {

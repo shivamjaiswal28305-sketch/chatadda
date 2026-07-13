@@ -49,19 +49,27 @@ googleSignInBtn.addEventListener('click', () => {
   auth.signInWithRedirect(provider);
 });
 
-auth.getRedirectResult()
-  .then((result) => {
-    if (result.user) {
-      googleUser = result.user;
-      googleSignInBtn.classList.add('hidden');
-      signedInAs.textContent = `Sign in ho gaye: ${googleUser.displayName}`;
-      signedInAs.classList.remove('hidden');
-      joinBtn.classList.remove('hidden');
-    }
-  })
-  .catch((err) => {
-    alert('Sign-in fail hua: ' + err.message);
-  });
+// Redirect ke baad koi error aaye to yahan pakdo (result khud onAuthStateChanged handle karega)
+auth.getRedirectResult().catch((err) => {
+  console.error('Redirect sign-in error:', err);
+  alert('Sign-in fail hua: ' + err.message);
+});
+
+// Yahi asli source of truth hai — page load / redirect / refresh sabme session ye pakad lega
+auth.onAuthStateChanged((user) => {
+  if (user) {
+    googleUser = user;
+    googleSignInBtn.classList.add('hidden');
+    signedInAs.textContent = `Sign in ho gaye: ${googleUser.displayName}`;
+    signedInAs.classList.remove('hidden');
+    joinBtn.classList.remove('hidden');
+  } else {
+    googleUser = null;
+    googleSignInBtn.classList.remove('hidden');
+    signedInAs.classList.add('hidden');
+    joinBtn.classList.add('hidden');
+  }
+});
 
 function joinChat() {
   if (!googleUser) return;

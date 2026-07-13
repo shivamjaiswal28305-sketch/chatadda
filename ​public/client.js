@@ -46,18 +46,22 @@ function saveBlocked() {
 // ---- Google Sign-In ----
 googleSignInBtn.addEventListener('click', () => {
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider)
-    .then((result) => {
+  auth.signInWithRedirect(provider);
+});
+
+auth.getRedirectResult()
+  .then((result) => {
+    if (result.user) {
       googleUser = result.user;
       googleSignInBtn.classList.add('hidden');
       signedInAs.textContent = `Sign in ho gaye: ${googleUser.displayName}`;
       signedInAs.classList.remove('hidden');
       joinBtn.classList.remove('hidden');
-    })
-    .catch((err) => {
-      alert('Sign-in fail hua: ' + err.message);
-    });
-});
+    }
+  })
+  .catch((err) => {
+    alert('Sign-in fail hua: ' + err.message);
+  });
 
 function joinChat() {
   if (!googleUser) return;

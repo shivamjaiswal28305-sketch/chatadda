@@ -680,3 +680,11 @@ button:focus-visible, input:focus-visible {
   left: 60px !important;
   font-size: 11px !important;
   }
+.online-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2ecc71;
+  margin-right: 6px;
+}

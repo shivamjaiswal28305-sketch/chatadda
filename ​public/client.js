@@ -52,8 +52,6 @@ googleSignInBtn.addEventListener('click', () => {
   });
 });
 
-
-
 // Yahi asli source of truth hai — page load / redirect / refresh sabme session ye pakad lega
 auth.onAuthStateChanged((user) => {
   if (user) {
@@ -77,6 +75,19 @@ function joinChat() {
 
 joinBtn.addEventListener('click', joinChat);
 
+// ---- Reconnect handling: agar socket kabhi disconnect/reconnect ho to dobara join ho jaaye ----
+socket.on('connect', () => {
+  if (myUsername) {
+    socket.emit('join', myUsername);
+  }
+});
+
+socket.on('disconnect', () => {
+  if (myUsername) {
+    showToast('Connection toota — dobara jodne ki koshish ho rahi hai...');
+  }
+});
+
 socket.on('joined', (finalName) => {
   myUsername = finalName;
   joinScreen.classList.add('hidden');
@@ -98,7 +109,7 @@ function renderUserList() {
       const li = document.createElement('li');
       const isBlocked = blockedUsers.has(u);
       li.className = (currentChat === u ? 'active-chat' : '') + (isBlocked ? ' blocked' : '');
-      li.innerHTML = `<span class="uname">${escapeHtml(u)}</span>${isBlocked ? '<span class="block-tag">Blocked</span>' : ''}`;
+      li.innerHTML = `<span class="online-dot"></span><span class="uname">${escapeHtml(u)}</span>${isBlocked ? '<span class="block-tag">Blocked</span>' : ''}`;
       li.addEventListener('click', () => switchToChat(u));
       userListEl.appendChild(li);
     });
@@ -288,10 +299,14 @@ const filterBar = document.getElementById('filterBar');
 const filterCanvas = document.getElementById('filterCanvas');
 const filterCtx = filterCanvas.getContext('2d');
 
+// ---- ICE servers: STUN + TURN (TURN zaroori hai jab dono log alag network/NAT pe ho) ----
 const rtcConfig = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
   ]
 };
 
@@ -305,6 +320,9 @@ let callSeconds = 0;
 let pendingIncomingOffer = null;
 let micOn = true;
 let camOn = true;
+let callConnected = false;
+let ringTimeout = null;
+let disconnectGraceTimeout = null;
 
 // ---- Instagram-style filters (CSS filter syntax works inside canvas 2D context too) ----
 const FILTERS = {
@@ -378,6 +396,7 @@ async function startCall(type) {
   }
   currentCallWith = currentChat;
   currentCallType = type;
+  callConnected = false;
 
   try {
     rawLocalStream = await navigator.mediaDevices.getUserMedia({
@@ -400,6 +419,15 @@ async function startCall(type) {
 
   socket.emit('callOffer', { toUsername: currentCallWith, offer, callType: type });
   showToast(`${currentCallWith} ko call kiya jaa raha hai...`);
+
+  // Agar 30 second tak koi answer/track na aaye to call apne aap cancel ho jaaye
+  clearTimeout(ringTimeout);
+  ringTimeout = setTimeout(() => {
+    if (peerConnection && !callConnected) {
+      showToast(`${currentCallWith} ne call receive nahi kiya`);
+      endCall(true);
+    }
+  }, 30000);
 }
 
 function setupPeerConnection() {
@@ -413,10 +441,26 @@ function setupPeerConnection() {
 
   peerConnection.ontrack = (event) => {
     remoteVideo.srcObject = event.streams[0];
+    callConnected = true;
+    clearTimeout(ringTimeout);
   };
 
+  // Chhota network hichkola (disconnected) turant call na kaate — thoda time do recover hone ka.
+  // Sirf 'failed' ya 'closed' pe turant kaato.
   peerConnection.onconnectionstatechange = () => {
-    if (['disconnected', 'failed', 'closed'].includes(peerConnection.connectionState)) {
+    const state = peerConnection.connectionState;
+    if (state === 'connected') {
+      callConnected = true;
+      clearTimeout(ringTimeout);
+      clearTimeout(disconnectGraceTimeout);
+    } else if (state === 'disconnected') {
+      clearTimeout(disconnectGraceTimeout);
+      disconnectGraceTimeout = setTimeout(() => {
+        if (peerConnection && peerConnection.connectionState === 'disconnected') {
+          endCall(false);
+        }
+      }, 6000);
+    } else if (['failed', 'closed'].includes(state)) {
       endCall(false);
     }
   };
@@ -440,6 +484,7 @@ acceptCallBtn.addEventListener('click', async () => {
 
   currentCallWith = fromUsername;
   currentCallType = callType;
+  callConnected = false;
 
   try {
     rawLocalStream = await navigator.mediaDevices.getUserMedia({
@@ -543,6 +588,8 @@ function endCall(notifyServer = true) {
 }
 
 function cleanupCall() {
+  clearTimeout(ringTimeout);
+  clearTimeout(disconnectGraceTimeout);
   if (peerConnection) {
     peerConnection.close();
     peerConnection = null;
@@ -561,6 +608,7 @@ function cleanupCall() {
   callTimerInterval = null;
   currentCallWith = null;
   currentCallType = null;
+  callConnected = false;
   micOn = true;
   camOn = true;
   currentFilter = 'none';

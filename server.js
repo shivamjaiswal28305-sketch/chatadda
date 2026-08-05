@@ -248,6 +248,19 @@ io.on('connection', (socket) => {
     if (targetId) io.to(targetId).emit('callReject', { fromUsername: socket.username });
   });
 
+  // Call ke beech audio <-> video switch karne ke liye (WhatsApp jaisa)
+  socket.on('callTypeSwitch', ({ toUsername, offer, newType }) => {
+    const targetId = findSocketIdByUsername(toUsername);
+    if (targetId && socket.username) {
+      io.to(targetId).emit('callTypeSwitch', { fromUsername: socket.username, offer, newType });
+    }
+  });
+
+  socket.on('callTypeSwitchAnswer', ({ toUsername, answer }) => {
+    const targetId = findSocketIdByUsername(toUsername);
+    if (targetId) io.to(targetId).emit('callTypeSwitchAnswer', { fromUsername: socket.username, answer });
+  });
+
   socket.on('callEnd', ({ toUsername }) => {
     const targetId = findSocketIdByUsername(toUsername);
     if (targetId) io.to(targetId).emit('callEnd', { fromUsername: socket.username });

@@ -4,21 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>ChatAdda — Free Live Chat, Video & Voice Call</title>
-<meta name="description" content="ChatAdda par bina login ke free real-time chat karo — public chat room, private messaging, aur audio/video calling. Bas username daalo aur baat shuru karo.">
-<meta name="keywords" content="free chat website, live chat, video call online, random chat, ladke ladki chat, chatadda">
-<meta property="og:title" content="ChatAdda — Free Live Chat, Video & Voice Call">
-<meta property="og:description" content="Bina login ke free real-time chat, private messaging aur video call.">
-<meta property="og:type" content="website">
+<meta name="description" content="ChatAdda par free real-time chat karo — public chat room, private messaging, media sharing, location, aur audio/video calling.">
 <link rel="icon" type="image/svg+xml" href="logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<link rel="stylesheet" href="new-styles.css">
 </head>
 <body>
 
-  <!-- Username entry screen -->
+  <!-- Login / Signup screen -->
   <div id="joinScreen" class="screen join-screen">
     <div class="string-lights" aria-hidden="true">
       <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
@@ -26,11 +21,28 @@
     <div class="join-card">
       <img src="logo.svg" alt="ChatAdda logo" class="brand-logo" width="72" height="72">
       <h1>Chat<span>Adda</span></h1>
-      <p class="tagline">Wahi chai-tapri wali baat — bas yahan chat pe. Naam daalo, adde pe aa jao.</p>
-      <button id="googleSignInBtn" class="google-btn">Google se Sign in karo</button>
-      <p id="signedInAs" class="hidden signed-in-as"></p>
-      <button id="joinBtn" class="hidden">Adde pe chalo →</button>
-      <p class="hint">Apna real naam, phone number, address kisi ajnabi ko na do. Suraksha aapke haath me hai.</p>
+      <p class="tagline">Wahi chai-tapri wali baat — bas yahan chat pe. Account banao, adde pe aa jao.</p>
+
+      <div class="auth-tabs">
+        <button id="loginTabBtn" class="auth-tab active">Login</button>
+        <button id="signupTabBtn" class="auth-tab">Naya Account</button>
+      </div>
+
+      <form id="loginForm" class="auth-form">
+        <input id="loginPhone" type="tel" placeholder="Phone number" required maxlength="15">
+        <input id="loginPassword" type="password" placeholder="Password" required maxlength="50">
+        <button type="submit">Login karo →</button>
+      </form>
+
+      <form id="signupForm" class="auth-form hidden">
+        <input id="signupUsername" type="text" placeholder="Username" required maxlength="20">
+        <input id="signupPhone" type="tel" placeholder="Phone number" required maxlength="15">
+        <input id="signupPassword" type="password" placeholder="Password (kam se kam 4 characters)" required maxlength="50">
+        <button type="submit">Account banao →</button>
+      </form>
+
+      <p id="authError" class="auth-error hidden"></p>
+      <p class="hint">Apna real naam, address kisi ajnabi ko na do. Suraksha aapke haath me hai.</p>
     </div>
   </div>
 
@@ -40,6 +52,7 @@
       <div class="sidebar-head">
         <img src="logo.svg" alt="ChatAdda" class="brand-logo-mini">
         <span>ChatAdda</span>
+        <button id="logoutBtn" class="logout-btn" title="Logout">⏻</button>
       </div>
       <button id="publicRoomBtn" class="room-item active" data-chat="public">
         <span class="room-icon">#</span> Adda Room (sabke saath)
@@ -55,49 +68,75 @@
         <div class="header-title" id="headerTitle">Adda Room</div>
         <div id="typingIndicator" class="typing-indicator"></div>
         <div id="chatActions" class="chat-actions hidden">
-          <button id="audioCallBtn" class="action-btn" title="Audio Call">🎤 Call</button>
-          <button id="videoCallBtn" class="action-btn" title="Video Call">📹 Video</button>
-          <button id="blockBtn" class="action-btn" title="Block/Unblock">🚫 Block</button>
-          <button id="reportBtn" class="action-btn" title="Report">⚠️ Report</button>
+          <button id="audioCallBtn" class="action-btn" title="Audio Call">📞</button>
+          <button id="videoCallBtn" class="action-btn" title="Video Call">📹</button>
+          <button id="wallpaperBtn" class="action-btn" title="Wallpaper">🖼️</button>
+          <button id="blockBtn" class="action-btn" title="Block/Unblock">🚫</button>
+          <button id="reportBtn" class="action-btn" title="Report">⚠️</button>
         </div>
       </header>
+
+      <!-- Wallpaper picker -->
+      <div id="wallpaperPicker" class="wallpaper-picker hidden">
+        <p>Wallpaper choose karo:</p>
+        <div class="wallpaper-options">
+          <button class="wallpaper-opt" data-wallpaper="default" style="background:#eee9dd"></button>
+          <button class="wallpaper-opt" data-wallpaper="teal" style="background:linear-gradient(135deg,#0f766e,#134e4a)"></button>
+          <button class="wallpaper-opt" data-wallpaper="purple" style="background:linear-gradient(135deg,#7c3aed,#4c1d95)"></button>
+          <button class="wallpaper-opt" data-wallpaper="sunset" style="background:linear-gradient(135deg,#f97316,#be185d)"></button>
+          <button class="wallpaper-opt" data-wallpaper="night" style="background:linear-gradient(135deg,#0f172a,#1e293b)"></button>
+          <button class="wallpaper-opt" data-wallpaper="rose" style="background:linear-gradient(135deg,#fb7185,#f43f5e)"></button>
+        </div>
+      </div>
 
       <div id="messages" class="messages"></div>
 
       <form id="messageForm" class="message-form">
+        <button type="button" id="attachBtn" class="attach-btn" title="Attach">📎</button>
+        <input id="fileInput" type="file" accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx" hidden>
+        <button type="button" id="locationBtn" class="attach-btn" title="Location bhejo">📍</button>
         <input id="messageInput" type="text" placeholder="Message likho..." autocomplete="off" maxlength="500">
         <button type="submit" aria-label="Send">➤</button>
       </form>
     </main>
   </div>
 
-  <!-- Incoming call popup -->
+  <!-- Incoming call popup (WhatsApp-style full screen) -->
   <div id="incomingCallModal" class="call-modal hidden">
     <div class="call-modal-card">
-      <div class="ring-avatar"></div>
+      <div class="ring-avatar-wrap">
+        <div class="ring-pulse"></div>
+        <div class="ring-pulse delay"></div>
+        <div class="ring-avatar" id="incomingAvatarInitial"></div>
+      </div>
       <h2 id="incomingCallText">Incoming call...</h2>
       <p id="incomingCallType" class="call-type-label"></p>
       <div class="call-modal-actions">
-        <button id="acceptCallBtn" class="call-btn accept">✅ Accept</button>
-        <button id="rejectCallBtn" class="call-btn reject">❌ Reject</button>
+        <button id="rejectCallBtn" class="call-round-btn reject" title="Reject">📞</button>
+        <button id="acceptCallBtn" class="call-round-btn accept" title="Accept">📞</button>
+      </div>
+      <div class="call-modal-labels">
+        <span>Decline</span>
+        <span>Accept</span>
       </div>
     </div>
   </div>
 
-  <!-- Active call overlay -->
+  <!-- Active call overlay (WhatsApp-style) -->
   <div id="activeCallOverlay" class="call-overlay hidden">
-    <div class="call-top">
-      <span id="callWithName">-</span>
-      <span id="callTimer">00:00</span>
-    </div>
     <div class="video-grid" id="videoGrid">
       <video id="remoteVideo" autoplay playsinline></video>
       <video id="localVideo" autoplay playsinline muted></video>
     </div>
     <div id="audioCallVisual" class="audio-call-visual hidden">
-      <div class="audio-avatar"></div>
-      <p>Audio call chal rahi hai...</p>
+      <div class="audio-avatar" id="audioAvatarInitial"></div>
     </div>
+
+    <div class="call-top">
+      <span id="callWithName">-</span>
+      <span id="callTimer">Connecting...</span>
+    </div>
+
     <div id="filterBar" class="filter-bar hidden">
       <button class="filter-btn active" data-filter="none">Normal</button>
       <button class="filter-btn" data-filter="clarendon">Clarendon</button>
@@ -107,10 +146,12 @@
       <button class="filter-btn" data-filter="moon">Moon</button>
     </div>
     <canvas id="filterCanvas" style="display:none;"></canvas>
+
     <div class="call-controls">
-      <button id="toggleMicBtn" class="call-control-btn">🎤</button>
-      <button id="toggleCamBtn" class="call-control-btn">📹</button>
-      <button id="endCallBtn" class="call-control-btn end">📞 End</button>
+      <button id="toggleMicBtn" class="call-control-btn" title="Mute/Unmute">🎤</button>
+      <button id="switchCallTypeBtn" class="call-control-btn" title="Switch Audio/Video">📹</button>
+      <button id="toggleCamBtn" class="call-control-btn hidden" title="Camera On/Off">📷</button>
+      <button id="endCallBtn" class="call-control-btn end" title="End Call">📞</button>
     </div>
   </div>
 

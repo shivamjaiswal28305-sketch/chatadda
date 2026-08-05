@@ -1,22 +1,15 @@
-// ==================== FIREBASE (Google Sign-In) ====================
-const firebaseConfig = {
-  apiKey: "AIzaSyDyDE41Dv-dovnAHGIhYr2WWDjTRhlFcIg",
-  authDomain: "chatadda-cfd71.firebaseapp.com",
-  projectId: "chatadda-cfd71",
-  storageBucket: "chatadda-cfd71.firebasestorage.app",
-  messagingSenderId: "840594705972",
-  appId: "1:840594705972:web:673d5d74dc677b08c28461"
-};
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-
+// ==================== AUTH (apna login/signup — Firebase hata diya) ====================
 const socket = io();
 
 const joinScreen = document.getElementById('joinScreen');
 const chatScreen = document.getElementById('chatScreen');
-const googleSignInBtn = document.getElementById('googleSignInBtn');
-const signedInAs = document.getElementById('signedInAs');
-const joinBtn = document.getElementById('joinBtn');
+const loginTabBtn = document.getElementById('loginTabBtn');
+const signupTabBtn = document.getElementById('signupTabBtn');
+const loginForm = document.getElementById('loginForm');
+const signupForm = document.getElementById('signupForm');
+const authError = document.getElementById('authError');
+const logoutBtn = document.getElementById('logoutBtn');
+
 const messagesEl = document.getElementById('messages');
 const messageForm = document.getElementById('messageForm');
 const messageInput = document.getElementById('messageInput');
@@ -29,72 +22,178 @@ const headerTitle = document.getElementById('headerTitle');
 const chatActions = document.getElementById('chatActions');
 const blockBtn = document.getElementById('blockBtn');
 const reportBtn = document.getElementById('reportBtn');
+const attachBtn = document.getElementById('attachBtn');
+const fileInput = document.getElementById('fileInput');
+const locationBtn = document.getElementById('locationBtn');
+const wallpaperBtn = document.getElementById('wallpaperBtn');
+const wallpaperPicker = document.getElementById('wallpaperPicker');
+
+// ==================== WALLPAPER ====================
+function getWallpaperKey(chat) { return `chatadda_wallpaper_${chat}`; }
+
+function applyWallpaper(chat) {
+  const saved = localStorage.getItem(getWallpaperKey(chat)) || 'default';
+  messagesEl.className = 'messages' + (saved !== 'default' ? ` wallpaper-${saved}` : '');
+  wallpaperPicker.querySelectorAll('.wallpaper-opt').forEach((btn) => {
+    btn.classList.toggle('selected', btn.dataset.wallpaper === saved);
+  });
+}
+
+wallpaperBtn.addEventListener('click', () => {
+  wallpaperPicker.classList.toggle('hidden');
+});
+
+wallpaperPicker.querySelectorAll('.wallpaper-opt').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    localStorage.setItem(getWallpaperKey(currentChat), btn.dataset.wallpaper);
+    applyWallpaper(currentChat);
+    wallpaperPicker.classList.add('hidden');
+  });
+});
+
+function getInitials(name) {
+  if (!name) return '?';
+  return name.trim().charAt(0).toUpperCase();
+}
 
 let myUsername = '';
 let currentChat = 'public';
 let onlineUsernames = [];
-let googleUser = null;
-
 const conversations = { public: [] };
-
 let blockedUsers = new Set(JSON.parse(localStorage.getItem('chatadda_blocked') || '[]'));
 
 function saveBlocked() {
   localStorage.setItem('chatadda_blocked', JSON.stringify([...blockedUsers]));
 }
 
-// ---- Google Sign-In ----
-googleSignInBtn.addEventListener('click', () => {
-  const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch((err) => {
-    console.error('Sign-in error:', err);
-    alert('Sign-in fail hua: ' + err.message);
-  });
+function getToken() { return localStorage.getItem('chatadda_token'); }
+function setToken(t) { localStorage.setItem('chatadda_token', t); }
+function clearToken() { localStorage.removeItem('chatadda_token'); }
+
+// ---- Tab switching (Login / Signup) ----
+loginTabBtn.addEventListener('click', () => {
+  loginTabBtn.classList.add('active');
+  signupTabBtn.classList.remove('active');
+  loginForm.classList.remove('hidden');
+  signupForm.classList.add('hidden');
+  authError.classList.add('hidden');
+});
+signupTabBtn.addEventListener('click', () => {
+  signupTabBtn.classList.add('active');
+  loginTabBtn.classList.remove('active');
+  signupForm.classList.remove('hidden');
+  loginForm.classList.add('hidden');
+  authError.classList.add('hidden');
 });
 
-// Yahi asli source of truth hai — page load / redirect / refresh sabme session ye pakad lega
-auth.onAuthStateChanged((user) => {
-  if (user) {
-    googleUser = user;
-    googleSignInBtn.classList.add('hidden');
-    signedInAs.textContent = `Sign in ho gaye: ${googleUser.displayName}`;
-    signedInAs.classList.remove('hidden');
-    joinBtn.classList.remove('hidden');
-  } else {
-    googleUser = null;
-    googleSignInBtn.classList.remove('hidden');
-    signedInAs.classList.add('hidden');
-    joinBtn.classList.add('hidden');
-  }
-});
-
-function joinChat() {
-  if (!googleUser) return;
-  socket.emit('join', googleUser.displayName);
+function showAuthError(msg) {
+  authError.textContent = msg;
+  authError.classList.remove('hidden');
 }
 
-joinBtn.addEventListener('click', joinChat);
-
-// ---- Reconnect handling: agar socket kabhi disconnect/reconnect ho to dobara join ho jaaye ----
-socket.on('connect', () => {
-  if (myUsername) {
-    socket.emit('join', myUsername);
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const phone = document.getElementById('loginPhone').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, password })
+    });
+    const data = await res.json();
+    if (!res.ok) return showAuthError(data.error || 'Login fail hua');
+    setToken(data.token);
+    startSession();
+  } catch (err) {
+    showAuthError('Network error — dobara try karo');
   }
+});
+
+signupForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('signupUsername').value.trim();
+  const phone = document.getElementById('signupPhone').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  try {
+    const res = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, phone, password })
+    });
+    const data = await res.json();
+    if (!res.ok) return showAuthError(data.error || 'Signup fail hua');
+    setToken(data.token);
+    startSession();
+  } catch (err) {
+    showAuthError('Network error — dobara try karo');
+  }
+});
+
+logoutBtn.addEventListener('click', () => {
+  clearToken();
+  location.reload();
+});
+
+function startSession() {
+  const token = getToken();
+  if (!token) return;
+  if (socket.connected) {
+    socket.emit('join', token);
+  }
+  // socket.io connect hone par bhi join try hoga (see socket.on('connect'))
+}
+
+socket.on('connect', () => {
+  const token = getToken();
+  if (token) socket.emit('join', token);
+});
+
+socket.on('authError', (msg) => {
+  clearToken();
+  showAuthError(msg);
+  chatScreen.classList.add('hidden');
+  joinScreen.classList.remove('hidden');
 });
 
 socket.on('disconnect', () => {
-  if (myUsername) {
-    showToast('Connection toota — dobara jodne ki koshish ho rahi hai...');
-  }
+  if (myUsername) showToast('Connection toota — dobara jodne ki koshish ho rahi hai...');
 });
 
 socket.on('joined', (finalName) => {
   myUsername = finalName;
   joinScreen.classList.add('hidden');
   chatScreen.classList.remove('hidden');
+  loadHistory('public');
+  applyWallpaper('public');
   messageInput.focus();
 });
 
+// Agar page load pe token already hai to seedha connect hone do (auto-login)
+if (getToken()) {
+  // socket 'connect' event apne aap fire hoga aur join ho jayega
+}
+
+// ==================== HISTORY LOADING ====================
+async function loadHistory(room) {
+  try {
+    const res = await fetch(`/api/messages/${encodeURIComponent(room)}`);
+    const msgs = await res.json();
+    const target = room === 'public' ? conversations.public : (conversations[currentChat] || []);
+    if (room === 'public') {
+      conversations.public = msgs.map(m => ({
+        username: m.fromUsername, type: m.type, text: m.text,
+        mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
+        time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      }));
+      if (currentChat === 'public') renderMessages();
+    }
+  } catch (err) {
+    console.error('History load error:', err);
+  }
+}
+
+// ==================== USER LIST / SWITCH CHAT ====================
 socket.on('userList', (users) => {
   onlineUsernames = users;
   renderUserList();
@@ -115,7 +214,7 @@ function renderUserList() {
     });
 }
 
-function switchToChat(target) {
+async function switchToChat(target) {
   currentChat = target;
   publicRoomBtn.classList.toggle('active', target === 'public');
   headerTitle.textContent = target === 'public' ? 'Adda Room' : target;
@@ -123,9 +222,27 @@ function switchToChat(target) {
   if (target !== 'public') {
     blockBtn.textContent = blockedUsers.has(target) ? '✅ Unblock' : '🚫 Block';
     blockBtn.classList.toggle('blocked-state', blockedUsers.has(target));
+
+    // Private chat history load karo (dono usernames sort karke room-id banta hai, server jaisa)
+    const room = [myUsername, target].sort().join('__');
+    if (!conversations[target] || conversations[target]._loaded !== true) {
+      try {
+        const res = await fetch(`/api/messages/${encodeURIComponent(room)}`);
+        const msgs = await res.json();
+        conversations[target] = msgs.map(m => ({
+          from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
+          type: m.type, text: m.text, mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
+          time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        }));
+        conversations[target]._loaded = true;
+      } catch (err) { /* ignore */ }
+    }
+    socket.emit('markRead', { room });
   }
   renderUserList();
   renderMessages();
+  applyWallpaper(target);
+  wallpaperPicker.classList.add('hidden');
   if (window.innerWidth <= 720) sidebar.classList.remove('open');
   messageInput.focus();
   updateCallButtonsVisibility();
@@ -133,6 +250,7 @@ function switchToChat(target) {
 
 publicRoomBtn.addEventListener('click', () => switchToChat('public'));
 
+// ==================== MESSAGE RENDERING ====================
 function renderMessages() {
   messagesEl.innerHTML = '';
   const list = conversations[currentChat] || [];
@@ -148,12 +266,25 @@ function appendMessageToDOM(data) {
     messagesEl.appendChild(div);
     return;
   }
-  const isMine = data.username === myUsername;
+  const isMine = (data.username || data.from) === myUsername;
   const div = document.createElement('div');
   div.className = 'msg' + (isMine ? ' mine' : '');
+
+  let bodyHtml = '';
+  if (data.type === 'image') {
+    bodyHtml = `<a href="${data.mediaUrl}" target="_blank"><img src="${data.mediaUrl}" class="msg-image" alt="image"></a>`;
+  } else if (data.type === 'document') {
+    bodyHtml = `<a href="${data.mediaUrl}" target="_blank" class="msg-doc">📄 ${escapeHtml(data.mediaName || 'Document')}</a>`;
+  } else if (data.type === 'location' && data.location) {
+    const { lat, lng } = data.location;
+    bodyHtml = `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" class="msg-location">📍 Location dekho</a>`;
+  } else {
+    bodyHtml = `<span class="msg-text">${escapeHtml(data.text)}</span>`;
+  }
+
   div.innerHTML = `
-    ${isMine ? '' : `<span class="msg-user">${escapeHtml(data.username)}</span>`}
-    <span class="msg-text">${escapeHtml(data.text)}</span>
+    ${isMine ? '' : `<span class="msg-user">${escapeHtml(data.username || data.from)}</span>`}
+    ${bodyHtml}
     <span class="msg-time">${data.time}</span>
   `;
   messagesEl.appendChild(div);
@@ -161,19 +292,13 @@ function appendMessageToDOM(data) {
 
 socket.on('system', (text) => {
   conversations.public.push({ system: true, text });
-  if (currentChat === 'public') {
-    appendMessageToDOM({ system: true, text });
-    scrollToBottom();
-  }
+  if (currentChat === 'public') { appendMessageToDOM({ system: true, text }); scrollToBottom(); }
 });
 
 socket.on('chatMessage', (data) => {
   if (blockedUsers.has(data.username)) return;
   conversations.public.push(data);
-  if (currentChat === 'public') {
-    appendMessageToDOM(data);
-    scrollToBottom();
-  }
+  if (currentChat === 'public') { appendMessageToDOM(data); scrollToBottom(); }
 });
 
 socket.on('privateMessage', (data) => {
@@ -182,58 +307,101 @@ socket.on('privateMessage', (data) => {
   if (!conversations[otherParty]) conversations[otherParty] = [];
   conversations[otherParty].push(data);
   if (currentChat === otherParty) {
-    appendMessageToDOM({ username: data.from, text: data.text, time: data.time });
+    appendMessageToDOM(data);
     scrollToBottom();
+    socket.emit('markRead', { room: [myUsername, otherParty].sort().join('__') });
   }
+});
+
+socket.on('messagesRead', ({ byUsername }) => {
+  if (currentChat === byUsername) showToast(`${byUsername} ne padh liya ✓✓`);
 });
 
 socket.on('typing', (username) => {
   if (currentChat !== 'public' || blockedUsers.has(username)) return;
   showTyping(username);
 });
-
 socket.on('privateTyping', (username) => {
   if (currentChat !== username || blockedUsers.has(username)) return;
   showTyping(username);
 });
-
 function showTyping(username) {
   typingIndicator.textContent = `${username} likh raha/rahi hai...`;
   clearTimeout(typingIndicator._t);
-  typingIndicator._t = setTimeout(() => {
-    typingIndicator.textContent = '';
-  }, 1500);
+  typingIndicator._t = setTimeout(() => { typingIndicator.textContent = ''; }, 1500);
 }
 
 socket.on('reportReceived', (reportedUsername) => {
   showToast(`Report bhej diya gaya (${reportedUsername})`);
 });
 
+// ==================== SEND TEXT ====================
 messageForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
   if (!text) return;
+  sendMessage({ type: 'text', text });
+  messageInput.value = '';
+});
 
+function sendMessage(payload) {
   if (currentChat === 'public') {
-    socket.emit('chatMessage', text);
+    socket.emit('chatMessage', payload);
   } else {
     if (blockedUsers.has(currentChat)) {
       showToast('Aapne isse block kiya hai. Pehle unblock karo.');
       return;
     }
-    socket.emit('privateMessage', { toUsername: currentChat, text });
+    socket.emit('privateMessage', { toUsername: currentChat, ...payload });
   }
-  messageInput.value = '';
-});
+}
 
 messageInput.addEventListener('input', () => {
-  if (currentChat === 'public') {
-    socket.emit('typing');
-  } else {
-    socket.emit('privateTyping', currentChat);
-  }
+  if (currentChat === 'public') socket.emit('typing');
+  else socket.emit('privateTyping', currentChat);
 });
 
+// ==================== MEDIA UPLOAD (image / document) ====================
+attachBtn.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  if (file.size > 15 * 1024 * 1024) {
+    showToast('File 15MB se badi hai');
+    fileInput.value = '';
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  showToast('Upload ho raha hai...');
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Upload fail hua'); return; }
+    sendMessage({ type: data.type, mediaUrl: data.url, mediaName: data.name });
+  } catch (err) {
+    showToast('Upload fail hua');
+  }
+  fileInput.value = '';
+});
+
+// ==================== LOCATION SHARE ====================
+locationBtn.addEventListener('click', () => {
+  if (!navigator.geolocation) { showToast('Location is browser me support nahi hai'); return; }
+  showToast('Location le rahe hain...');
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      sendMessage({ type: 'location', location: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
+    },
+    () => showToast('Location permission nahi mili'),
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+});
+
+// ==================== BLOCK / REPORT ====================
 blockBtn.addEventListener('click', () => {
   if (currentChat === 'public') return;
   if (blockedUsers.has(currentChat)) {
@@ -254,20 +422,14 @@ reportBtn.addEventListener('click', () => {
   socket.emit('reportUser', { reportedUsername: currentChat, reason });
 });
 
-menuBtn.addEventListener('click', () => {
-  sidebar.classList.toggle('open');
-});
+menuBtn.addEventListener('click', () => sidebar.classList.toggle('open'));
 
-function scrollToBottom() {
-  messagesEl.scrollTop = messagesEl.scrollHeight;
-}
-
+function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 function escapeHtml(str) {
   const div = document.createElement('div');
-  div.textContent = str;
+  div.textContent = str || '';
   return div.innerHTML;
 }
-
 function showToast(text) {
   const div = document.createElement('div');
   div.className = 'toast';
@@ -276,8 +438,7 @@ function showToast(text) {
   setTimeout(() => div.remove(), 2500);
 }
 
-// ==================== AUDIO / VIDEO CALLING (WebRTC) ====================
-
+// ==================== AUDIO / VIDEO CALLING (WebRTC) — UNCHANGED ====================
 const audioCallBtn = document.getElementById('audioCallBtn');
 const videoCallBtn = document.getElementById('videoCallBtn');
 const incomingCallModal = document.getElementById('incomingCallModal');
@@ -294,12 +455,14 @@ const callWithName = document.getElementById('callWithName');
 const callTimer = document.getElementById('callTimer');
 const toggleMicBtn = document.getElementById('toggleMicBtn');
 const toggleCamBtn = document.getElementById('toggleCamBtn');
+const switchCallTypeBtn = document.getElementById('switchCallTypeBtn');
 const endCallBtn = document.getElementById('endCallBtn');
+const incomingAvatarInitial = document.getElementById('incomingAvatarInitial');
+const audioAvatarInitial = document.getElementById('audioAvatarInitial');
 const filterBar = document.getElementById('filterBar');
 const filterCanvas = document.getElementById('filterCanvas');
 const filterCtx = filterCanvas.getContext('2d');
 
-// ---- ICE servers: STUN + TURN (TURN zaroori hai jab dono log alag network/NAT pe ho) ----
 const rtcConfig = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -311,8 +474,8 @@ const rtcConfig = {
 };
 
 let peerConnection = null;
-let rawLocalStream = null;   // raw camera+mic
-let localStream = null;      // stream actually sent over the call (filtered for video)
+let rawLocalStream = null;
+let localStream = null;
 let currentCallWith = null;
 let currentCallType = null;
 let callTimerInterval = null;
@@ -324,7 +487,6 @@ let callConnected = false;
 let ringTimeout = null;
 let disconnectGraceTimeout = null;
 
-// ---- Instagram-style filters (CSS filter syntax works inside canvas 2D context too) ----
 const FILTERS = {
   none: 'none',
   clarendon: 'contrast(1.2) saturate(1.35) brightness(1.05)',
@@ -342,10 +504,8 @@ hiddenSourceVideo.playsInline = true;
 function startFilterProcessing(rawStream) {
   hiddenSourceVideo.srcObject = rawStream;
   hiddenSourceVideo.play().catch(() => {});
-
   filterCanvas.width = 480;
   filterCanvas.height = 640;
-
   function drawFrame() {
     if (camOn && hiddenSourceVideo.readyState >= 2) {
       filterCtx.filter = FILTERS[currentFilter] || 'none';
@@ -358,19 +518,16 @@ function startFilterProcessing(rawStream) {
     filterRAF = requestAnimationFrame(drawFrame);
   }
   drawFrame();
-
   const canvasStream = filterCanvas.captureStream(30);
   const audioTrack = rawStream.getAudioTracks()[0];
   if (audioTrack) canvasStream.addTrack(audioTrack);
   return canvasStream;
 }
-
 function stopFilterProcessing() {
   if (filterRAF) cancelAnimationFrame(filterRAF);
   filterRAF = null;
   hiddenSourceVideo.srcObject = null;
 }
-
 filterBar.querySelectorAll('.filter-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
     currentFilter = btn.dataset.filter;
@@ -390,37 +547,24 @@ videoCallBtn.addEventListener('click', () => startCall('video'));
 
 async function startCall(type) {
   if (currentChat === 'public') return;
-  if (peerConnection) {
-    showToast('Aap pehle se call me ho.');
-    return;
-  }
+  if (peerConnection) { showToast('Aap pehle se call me ho.'); return; }
   currentCallWith = currentChat;
   currentCallType = type;
   callConnected = false;
-
   try {
-    rawLocalStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: type === 'video'
-    });
+    rawLocalStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: type === 'video' });
   } catch (err) {
     showToast('Camera/mic access nahi mila. Permission check karo.');
     currentCallWith = null;
     return;
   }
-
   localStream = type === 'video' ? startFilterProcessing(rawLocalStream) : rawLocalStream;
-
   setupPeerConnection();
   localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
-
   const offer = await peerConnection.createOffer();
   await peerConnection.setLocalDescription(offer);
-
   socket.emit('callOffer', { toUsername: currentCallWith, offer, callType: type });
   showToast(`${currentCallWith} ko call kiya jaa raha hai...`);
-
-  // Agar 30 second tak koi answer/track na aaye to call apne aap cancel ho jaaye
   clearTimeout(ringTimeout);
   ringTimeout = setTimeout(() => {
     if (peerConnection && !callConnected) {
@@ -432,21 +576,16 @@ async function startCall(type) {
 
 function setupPeerConnection() {
   peerConnection = new RTCPeerConnection(rtcConfig);
-
   peerConnection.onicecandidate = (event) => {
     if (event.candidate && currentCallWith) {
       socket.emit('iceCandidate', { toUsername: currentCallWith, candidate: event.candidate });
     }
   };
-
   peerConnection.ontrack = (event) => {
     remoteVideo.srcObject = event.streams[0];
     callConnected = true;
     clearTimeout(ringTimeout);
   };
-
-  // Chhota network hichkola (disconnected) turant call na kaate — thoda time do recover hone ka.
-  // Sirf 'failed' ya 'closed' pe turant kaato.
   peerConnection.onconnectionstatechange = () => {
     const state = peerConnection.connectionState;
     if (state === 'connected') {
@@ -456,9 +595,7 @@ function setupPeerConnection() {
     } else if (state === 'disconnected') {
       clearTimeout(disconnectGraceTimeout);
       disconnectGraceTimeout = setTimeout(() => {
-        if (peerConnection && peerConnection.connectionState === 'disconnected') {
-          endCall(false);
-        }
+        if (peerConnection && peerConnection.connectionState === 'disconnected') endCall(false);
       }, 6000);
     } else if (['failed', 'closed'].includes(state)) {
       endCall(false);
@@ -472,8 +609,9 @@ socket.on('callOffer', ({ fromUsername, offer, callType }) => {
     return;
   }
   pendingIncomingOffer = { fromUsername, offer, callType };
-  incomingCallText.textContent = `${fromUsername} call kar raha/rahi hai`;
-  incomingCallType.textContent = callType === 'video' ? '📹 Video Call' : '🎤 Audio Call';
+  incomingAvatarInitial.textContent = getInitials(fromUsername);
+  incomingCallText.textContent = `${fromUsername}`;
+  incomingCallType.textContent = callType === 'video' ? '📹 Video Call aa rahi hai' : '📞 Audio Call aa rahi hai';
   incomingCallModal.classList.remove('hidden');
 });
 
@@ -481,41 +619,30 @@ acceptCallBtn.addEventListener('click', async () => {
   if (!pendingIncomingOffer) return;
   const { fromUsername, offer, callType } = pendingIncomingOffer;
   incomingCallModal.classList.add('hidden');
-
   currentCallWith = fromUsername;
   currentCallType = callType;
   callConnected = false;
-
   try {
-    rawLocalStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: callType === 'video'
-    });
+    rawLocalStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: callType === 'video' });
   } catch (err) {
     showToast('Camera/mic access nahi mila.');
     socket.emit('callReject', { toUsername: fromUsername });
     pendingIncomingOffer = null;
     return;
   }
-
   localStream = callType === 'video' ? startFilterProcessing(rawLocalStream) : rawLocalStream;
-
   setupPeerConnection();
   localStream.getTracks().forEach((track) => peerConnection.addTrack(track, localStream));
-
   await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
   const answer = await peerConnection.createAnswer();
   await peerConnection.setLocalDescription(answer);
   socket.emit('callAnswer', { toUsername: fromUsername, answer });
-
   pendingIncomingOffer = null;
   openCallUI();
 });
 
 rejectCallBtn.addEventListener('click', () => {
-  if (pendingIncomingOffer) {
-    socket.emit('callReject', { toUsername: pendingIncomingOffer.fromUsername });
-  }
+  if (pendingIncomingOffer) socket.emit('callReject', { toUsername: pendingIncomingOffer.fromUsername });
   pendingIncomingOffer = null;
   incomingCallModal.classList.add('hidden');
 });
@@ -528,48 +655,46 @@ socket.on('callAnswer', async ({ answer }) => {
 
 socket.on('iceCandidate', async ({ candidate }) => {
   if (peerConnection && candidate) {
-    try {
-      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) {
-      console.error('ICE candidate error', e);
-    }
+    try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); }
+    catch (e) { console.error('ICE candidate error', e); }
   }
 });
 
 socket.on('callReject', ({ fromUsername }) => {
-  if (currentCallWith === fromUsername) {
-    showToast(`${fromUsername} ne call reject kar di`);
-    cleanupCall();
-  }
+  if (currentCallWith === fromUsername) { showToast(`${fromUsername} ne call reject kar di`); cleanupCall(); }
 });
-
 socket.on('callEnd', ({ fromUsername }) => {
-  if (currentCallWith === fromUsername) {
-    showToast(`Call khatam ho gayi`);
-    cleanupCall();
-  }
+  if (currentCallWith === fromUsername) { showToast(`Call khatam ho gayi`); cleanupCall(); }
 });
-
 socket.on('callFailed', ({ toUsername }) => {
   showToast(`${toUsername} is waqt online nahi hai`);
   cleanupCall();
 });
 
-function openCallUI() {
-  activeCallOverlay.classList.remove('hidden');
-  callWithName.textContent = currentCallWith;
-
+function updateCallTypeUI() {
   if (currentCallType === 'video') {
     videoGrid.classList.remove('hidden');
     audioCallVisual.classList.add('hidden');
     filterBar.classList.remove('hidden');
-    localVideo.srcObject = localStream;
+    toggleCamBtn.classList.remove('hidden');
+    switchCallTypeBtn.textContent = '📞';
+    switchCallTypeBtn.title = 'Audio call pe switch karo';
+    if (localStream) localVideo.srcObject = localStream;
   } else {
     videoGrid.classList.add('hidden');
     audioCallVisual.classList.remove('hidden');
     filterBar.classList.add('hidden');
+    toggleCamBtn.classList.add('hidden');
+    switchCallTypeBtn.textContent = '📹';
+    switchCallTypeBtn.title = 'Video call pe switch karo';
+    audioAvatarInitial.textContent = getInitials(currentCallWith);
   }
+}
 
+function openCallUI() {
+  activeCallOverlay.classList.remove('hidden');
+  callWithName.textContent = currentCallWith;
+  updateCallTypeUI();
   callSeconds = 0;
   callTimer.textContent = '00:00';
   callTimerInterval = setInterval(() => {
@@ -581,24 +706,16 @@ function openCallUI() {
 }
 
 function endCall(notifyServer = true) {
-  if (notifyServer && currentCallWith) {
-    socket.emit('callEnd', { toUsername: currentCallWith });
-  }
+  if (notifyServer && currentCallWith) socket.emit('callEnd', { toUsername: currentCallWith });
   cleanupCall();
 }
 
 function cleanupCall() {
   clearTimeout(ringTimeout);
   clearTimeout(disconnectGraceTimeout);
-  if (peerConnection) {
-    peerConnection.close();
-    peerConnection = null;
-  }
+  if (peerConnection) { peerConnection.close(); peerConnection = null; }
   stopFilterProcessing();
-  if (rawLocalStream) {
-    rawLocalStream.getTracks().forEach((t) => t.stop());
-    rawLocalStream = null;
-  }
+  if (rawLocalStream) { rawLocalStream.getTracks().forEach((t) => t.stop()); rawLocalStream = null; }
   localStream = null;
   remoteVideo.srcObject = null;
   localVideo.srcObject = null;
@@ -620,8 +737,59 @@ function cleanupCall() {
   toggleCamBtn.classList.remove('muted');
 }
 
-endCallBtn.addEventListener('click', () => endCall(true));
+// ---- Call ke BEECH mein Audio <-> Video switch karna (WhatsApp jaisa) ----
+switchCallTypeBtn.addEventListener('click', async () => {
+  if (!peerConnection || !currentCallWith) return;
+  const goingToVideo = currentCallType !== 'video';
 
+  try {
+    if (goingToVideo) {
+      // Camera on karo aur peer connection me video track add karo
+      const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const videoTrack = camStream.getVideoTracks()[0];
+      rawLocalStream = rawLocalStream || camStream;
+      if (!rawLocalStream.getVideoTracks().length) {
+        rawLocalStream.addTrack(videoTrack);
+      }
+      const sender = peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
+      if (sender) sender.replaceTrack(videoTrack);
+      else peerConnection.addTrack(videoTrack, rawLocalStream);
+      localStream = rawLocalStream;
+      currentCallType = 'video';
+    } else {
+      // Video band karo, sirf audio track chalti rahegi
+      const videoSender = peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
+      if (videoSender && videoSender.track) videoSender.track.stop();
+      if (videoSender) peerConnection.removeTrack(videoSender);
+      currentCallType = 'audio';
+    }
+
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    socket.emit('callTypeSwitch', { toUsername: currentCallWith, offer, newType: currentCallType });
+    updateCallTypeUI();
+  } catch (err) {
+    showToast('Camera switch nahi ho paya. Permission check karo.');
+  }
+});
+
+// Doosre banda jab switch karta hai, ye event aata hai
+socket.on('callTypeSwitch', async ({ fromUsername, offer, newType }) => {
+  if (!peerConnection || currentCallWith !== fromUsername) return;
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+  const answer = await peerConnection.createAnswer();
+  await peerConnection.setLocalDescription(answer);
+  socket.emit('callTypeSwitchAnswer', { toUsername: fromUsername, answer });
+  currentCallType = newType;
+  updateCallTypeUI();
+});
+
+socket.on('callTypeSwitchAnswer', async ({ answer }) => {
+  if (!peerConnection) return;
+  await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+});
+
+endCallBtn.addEventListener('click', () => endCall(true));
 toggleMicBtn.addEventListener('click', () => {
   if (!rawLocalStream) return;
   micOn = !micOn;
@@ -629,7 +797,6 @@ toggleMicBtn.addEventListener('click', () => {
   toggleMicBtn.textContent = micOn ? '🎤' : '🔇';
   toggleMicBtn.classList.toggle('muted', !micOn);
 });
-
 toggleCamBtn.addEventListener('click', () => {
   if (currentCallType !== 'video') return;
   camOn = !camOn;
@@ -638,3 +805,4 @@ toggleCamBtn.addEventListener('click', () => {
 });
 
 updateCallButtonsVisibility();
+

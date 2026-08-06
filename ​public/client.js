@@ -269,7 +269,14 @@ async function switchToChat(target) {
   applyWallpaper(target);
   wallpaperPicker.classList.add('hidden');
   if (window.innerWidth <= 720) sidebar.classList.remove('open');
-  messageInput.focus();
+
+  // FIX: mobile par auto-focus se keyboard khulta tha aur page scroll ho jaata tha,
+  // jisse header viewport se bahar chala jaata tha kuch phones par.
+  // Ab sirf desktop/tablet (>720px) par hi auto-focus hoga.
+  if (window.innerWidth > 720) {
+    messageInput.focus();
+  }
+
   updateCallButtonsVisibility();
 }
 
@@ -877,3 +884,14 @@ toggleCamBtn.addEventListener('click', () => {
 });
 
 updateCallButtonsVisibility();
+
+// FIX: keyboard band hone ke baad kabhi kabhi page scroll position gadbad reh jaati hai
+// (kuch Android phones par), jisse header viewport se bahar chala jaata hai.
+// Visual viewport resize hone par (jaise keyboard band hote waqt) scroll reset kar do.
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  });
+}

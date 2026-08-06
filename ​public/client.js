@@ -30,6 +30,9 @@ const wallpaperPicker = document.getElementById('wallpaperPicker');
 const searchPhoneInput = document.getElementById('searchPhoneInput');
 const searchPhoneBtn = document.getElementById('searchPhoneBtn');
 const searchResult = document.getElementById('searchResult');
+const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+const savedContactsSection = document.getElementById('savedContactsSection');
+const savedContactsList = document.getElementById('savedContactsList');
 
 // ==================== WALLPAPER ====================
 function getWallpaperKey(chat) { return `chatadda_wallpaper_${chat}`; }
@@ -59,6 +62,79 @@ wallpaperPicker.querySelectorAll('.wallpaper-opt').forEach((btn) => {
 function getInitials(name) {
   if (!name) return '?';
   return name.trim().charAt(0).toUpperCase();
+}
+
+// ==================== SAVED CONTACTS (localStorage) ====================
+function getContacts() {
+  return JSON.parse(localStorage.getItem('chatadda_contacts') || '[]');
+}
+function saveContactLocal(username) {
+  if (!username) return;
+  const list = getContacts();
+  if (!list.includes(username)) {
+    list.push(username);
+    localStorage.setItem('chatadda_contacts', JSON.stringify(list));
+  }
+  renderSavedContacts();
+}
+function removeContactLocal(username) {
+  const list = getContacts().filter((u) => u !== username);
+  localStorage.setItem('chatadda_contacts', JSON.stringify(list));
+  renderSavedContacts();
+}
+function renderSavedContacts() {
+  const list = getContacts();
+  savedContactsList.innerHTML = '';
+  if (!list.length) {
+    savedContactsSection.classList.add('hidden');
+    return;
+  }
+  savedContactsSection.classList.remove('hidden');
+  list.forEach((u) => {
+    const li = document.createElement('li');
+    li.className = currentChat === u ? 'active-chat' : '';
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'uname';
+    nameSpan.textContent = `💬 ${u}`;
+    li.appendChild(nameSpan);
+    const rmBtn = document.createElement('button');
+    rmBtn.className = 'contact-remove-btn';
+    rmBtn.title = 'Contact hatao';
+    rmBtn.textContent = '✕';
+    rmBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      removeContactLocal(u);
+    });
+    li.appendChild(rmBtn);
+    li.addEventListener('click', () => switchToChat(u));
+    savedContactsList.appendChild(li);
+  });
+}
+
+// ==================== MESSAGE DELETE (delete for me — local) ====================
+function msgSignature(data) {
+  return `${data.time}|${data.text || data.mediaUrl || ''}|${data.username || data.from || ''}`;
+}
+function getHiddenMsgs() {
+  return new Set(JSON.parse(localStorage.getItem('chatadda_hidden_msgs') || '[]'));
+}
+function hideMsgPermanently(sig) {
+  const s = getHiddenMsgs();
+  s.add(sig);
+  localStorage.setItem('chatadda_hidden_msgs', JSON.stringify([...s]));
+}
+function filterHiddenMsgs(list) {
+  const hidden = getHiddenMsgs();
+  return list.filter((m) => hidden.has(msgSignature(m)) === false);
+}
+function deleteMessage(data, list) {
+  if (!confirm('Ye message delete karna hai?')) return;
+  hideMsgPermanently(msgSignature(data));
+  if (list) {
+    const idx = list.indexOf(data);
+    if (idx !== -1) list.splice(idx, 1);
+  }
+  renderMessages();
 }
 
 let myUsername = '';
@@ -170,6 +246,7 @@ socket.on('joined', (finalName) => {
   joinScreen.classList.add('hidden');
   chatScreen.classList.remove('hidden');
   showEmptyState();
+  renderSavedContacts();
 });
 
 function showEmptyState() {
@@ -193,11 +270,11 @@ async function loadHistory(room) {
     const res = await fetch(`/api/messages/${encodeURIComponent(room)}`);
     const msgs = await res.json();
     if (room === 'public') {
-      conversations.public = msgs.map(m => ({
+      conversations.public = filterHiddenMsgs(msgs.map(m => ({
         username: m.fromUsername, type: m.type, text: m.text,
         mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
         time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-      }));
+      })));
       conversations.public._loaded = true;
       if (currentChat === 'public') renderMessages();
     }
@@ -253,12 +330,12 @@ async function switchToChat(target) {
       try {
         const res = await fetch(`/api/messages/${encodeURIComponent(room)}`);
         const msgs = await res.json();
-        conversations[target] = msgs.map(m => ({
+        conversations[target] = filterHiddenMsgs(msgs.map(m => ({
           from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
           type: m.type, text: m.text, mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
           time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           read: m.readBy && m.readBy.length > 0
-        }));
+        })));
         conversations[target]._loaded = true;
       } catch (err) { /* ignore */ }
     }
@@ -268,7 +345,11 @@ async function switchToChat(target) {
   renderMessages();
   applyWallpaper(target);
   wallpaperPicker.classList.add('hidden');
-  if (window.innerWidth <= 720) sidebar.classList.remove('open');
+  if (window.innerWidth <= 720) {
+    sidebar.classList.remove('open');
+    sidebarBackdrop.classList.add('hidden');
+  }
+  renderSavedContacts();
 
   // FIX: mobile par auto-focus se keyboard khulta tha aur page scroll ho jaata tha,
   // jisse header viewport se bahar chala jaata tha kuch phones par.
@@ -311,6 +392,7 @@ async function doPhoneSearch() {
     btn.addEventListener('click', () => {
       searchResult.classList.add('hidden');
       searchPhoneInput.value = '';
+      saveContactLocal(data.username);
       switchToChat(data.username);
     });
     searchResult.appendChild(btn);
@@ -323,11 +405,11 @@ async function doPhoneSearch() {
 function renderMessages() {
   messagesEl.innerHTML = '';
   const list = conversations[currentChat] || [];
-  list.forEach((data) => appendMessageToDOM(data));
+  list.forEach((data) => appendMessageToDOM(data, list));
   scrollToBottom();
 }
 
-function appendMessageToDOM(data) {
+function appendMessageToDOM(data, list) {
   if (data.system) {
     const div = document.createElement('div');
     div.className = 'msg system';
@@ -361,6 +443,16 @@ function appendMessageToDOM(data) {
     ${bodyHtml}
     <span class="msg-time">${data.time}${ticksHtml}</span>
   `;
+
+  if (isMine) {
+    const delBtn = document.createElement('button');
+    delBtn.className = 'msg-delete-btn';
+    delBtn.title = 'Delete';
+    delBtn.textContent = '🗑';
+    delBtn.addEventListener('click', () => deleteMessage(data, list));
+    div.appendChild(delBtn);
+  }
+
   messagesEl.appendChild(div);
 }
 
@@ -372,7 +464,7 @@ socket.on('system', (text) => {
 socket.on('chatMessage', (data) => {
   if (blockedUsers.has(data.username)) return;
   conversations.public.push(data);
-  if (currentChat === 'public') { appendMessageToDOM(data); scrollToBottom(); }
+  if (currentChat === 'public') { appendMessageToDOM(data, conversations.public); scrollToBottom(); }
 });
 
 socket.on('privateMessage', (data) => {
@@ -381,7 +473,7 @@ socket.on('privateMessage', (data) => {
   if (!conversations[otherParty]) conversations[otherParty] = [];
   conversations[otherParty].push(data);
   if (currentChat === otherParty) {
-    appendMessageToDOM(data);
+    appendMessageToDOM(data, conversations[otherParty]);
     scrollToBottom();
     socket.emit('markRead', { room: [myUsername, otherParty].sort().join('__') });
   }
@@ -505,7 +597,14 @@ reportBtn.addEventListener('click', () => {
   socket.emit('reportUser', { reportedUsername: currentChat, reason });
 });
 
-menuBtn.addEventListener('click', () => sidebar.classList.toggle('open'));
+menuBtn.addEventListener('click', () => {
+  sidebar.classList.toggle('open');
+  sidebarBackdrop.classList.toggle('hidden');
+});
+sidebarBackdrop.addEventListener('click', () => {
+  sidebar.classList.remove('open');
+  sidebarBackdrop.classList.add('hidden');
+});
 
 function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight; }
 function escapeHtml(str) {

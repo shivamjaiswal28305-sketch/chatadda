@@ -458,16 +458,66 @@ body {
 
 /* ==================== JOIN SCREEN VISIBILITY FIX ==================== */
 .join-screen.hidden { display: none !important; }
-html, body {
-  height: 100%;
-  overflow: hidden;
+
+/* ==================== EMPTY STATE (no chat selected) ==================== */
+.empty-state {
+  margin: auto;
+  text-align: center;
+  color: #667781;
+  font-size: 15px;
+  padding: 20px;
 }
-.chat-screen {
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
+
+/* ==================== PHONE SEARCH BOX ==================== */
+.search-box {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f2f5;
 }
-.sidebar {
-  height: 100vh;
-  height: 100dvh;
+.search-box input {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  outline: none;
 }
+.search-box input:focus { border-color: #25D366; }
+.search-box button {
+  width: 38px;
+  border: none;
+  border-radius: 8px;
+  background: #25D366;
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+.search-result {
+  padding: 8px 12px 12px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.search-status { font-size: 13px; color: #667781; }
+.search-not-found { font-size: 13px; color: #d33; }
+.search-found-btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  background: #e7f8f0;
+  color: #075E54;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+.search-found-btn:hover { background: #d9fdd3; }
+
+/* ==================== READ RECEIPT TICKS ==================== */
+.msg-ticks {
+  margin-left: 4px;
+  font-size: 11px;
+  color: #8696a0;
+  letter-spacing: -2px;
+}
+.msg-ticks.read { color: #53bdeb; }

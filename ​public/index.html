@@ -9,16 +9,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="new-styles.css"><link rel="stylesheet" href="telegram-theme.css">
 </head>
-  
 <body>
 
   <!-- Login / Signup screen -->
   <div id="joinScreen" class="screen join-screen">
-    <div class="string-lights" aria-hidden="true">
-      <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
-    </div>
     <div class="join-card">
       <img src="logo.svg" alt="ChatAdda logo" class="brand-logo" width="72" height="72">
       <h1>Chat<span>Adda</span></h1>
@@ -55,7 +50,15 @@
         <span>ChatAdda</span>
         <button id="logoutBtn" class="logout-btn" title="Logout">⏻</button>
       </div>
-      <button id="publicRoomBtn" class="room-item active" data-chat="public">
+
+      <!-- Phone number se dhoondo -->
+      <div class="search-box">
+        <input id="searchPhoneInput" type="tel" placeholder="Phone number se dhoondo...">
+        <button id="searchPhoneBtn" title="Search">🔍</button>
+      </div>
+      <div id="searchResult" class="search-result hidden"></div>
+
+      <button id="publicRoomBtn" class="room-item" data-chat="public">
         <span class="room-icon">#</span> Adda Room (sabke saath)
       </button>
 
@@ -66,7 +69,7 @@
     <main class="chat-main">
       <header class="chat-header">
         <button id="menuBtn" class="menu-btn" aria-label="Users">☰</button>
-        <div class="header-title" id="headerTitle">Adda Room</div>
+        <div class="header-title" id="headerTitle">ChatAdda</div>
         <div id="typingIndicator" class="typing-indicator"></div>
         <div id="chatActions" class="chat-actions hidden">
           <button id="audioCallBtn" class="action-btn" title="Audio Call">📞</button>
@@ -92,7 +95,7 @@
 
       <div id="messages" class="messages"></div>
 
-      <form id="messageForm" class="message-form">
+      <form id="messageForm" class="message-form hidden">
         <button type="button" id="attachBtn" class="attach-btn" title="Attach">📎</button>
         <input id="fileInput" type="file" accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx" hidden>
         <button type="button" id="locationBtn" class="attach-btn" title="Location bhejo">📍</button>
@@ -159,4 +162,4 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="client.js"></script>
 </body>
-        </html>
+</html>

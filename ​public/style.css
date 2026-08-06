@@ -10,7 +10,7 @@ body {
   width: 100%;
 }
 .hidden { display: none !important; }
-.screen { width: 100%; height: 100vh; }
+.screen { width: 100%; height: 100dvh; }
 
 /* ==================== JOIN / LOGIN SCREEN ==================== */
 .join-screen {
@@ -56,7 +56,7 @@ body {
 /* ==================== CHAT SCREEN LAYOUT ==================== */
 .chat-screen {
   display: flex;
-  height: 100vh;
+  height: 100dvh;
   background: #fff;
 }
 

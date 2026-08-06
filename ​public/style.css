@@ -458,3 +458,16 @@ body {
 
 /* ==================== JOIN SCREEN VISIBILITY FIX ==================== */
 .join-screen.hidden { display: none !important; }
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+.chat-screen {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+.sidebar {
+  height: 100vh;
+  height: 100dvh;
+}

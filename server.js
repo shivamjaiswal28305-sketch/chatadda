@@ -56,8 +56,23 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
+// Phone number se exact user search — sirf username return karta hai, phone kabhi expose nahi hota
+app.get('/api/users/search', async (req, res) => {
+  try {
+    const phone = String(req.query.phone || '').trim();
+    if (!phone) return res.status(400).json({ error: 'Phone number do' });
+
+    const user = await User.findOne({ phone }, 'username').lean();
+    if (!user) return res.status(404).json({ error: 'Ye number ChatAdda pe registered nahi hai' });
+
+    res.json({ username: user.username });
+  } catch (err) {
+    res.status(500).json({ error: 'Search fail hua' });
+  }
+});
+
 // ---------- socket <-> username tracking ----------
-const onlineUsers = {}; // socketId -> { userId, username }
+const onlineUsers = {}; // socketId -> { userId, username, inPublicRoom }
 
 const blockedWords = ['badword1', 'badword2'];
 function cleanMessage(msg) {
@@ -71,6 +86,10 @@ function cleanMessage(msg) {
 
 function findSocketIdByUsername(username) {
   return Object.keys(onlineUsers).find(id => onlineUsers[id].username === username);
+}
+
+function publicRoomUsernames() {
+  return Object.values(onlineUsers).filter(u => u.inPublicRoom).map(u => u.username);
 }
 
 // Private room id: dono usernames ko sort karke jodo, taaki dono taraf se same room-id bane
@@ -92,7 +111,7 @@ function saveReport(entry) {
 io.on('connection', (socket) => {
   console.log('New connection:', socket.id);
 
-  // ---------- JOIN (ab JWT token se, Google Sign-In ki jagah) ----------
+  // ---------- JOIN (auth only — koi broadcast nahi, silent) ----------
   socket.on('join', async (token) => {
     const payload = verifyToken(token);
     if (!payload) {
@@ -105,7 +124,7 @@ io.on('connection', (socket) => {
       return;
     }
 
-    onlineUsers[socket.id] = { userId: String(user._id), username: user.username };
+    onlineUsers[socket.id] = { userId: String(user._id), username: user.username, inPublicRoom: false };
     socket.username = user.username;
     socket.userId = String(user._id);
 
@@ -114,8 +133,24 @@ io.on('connection', (socket) => {
     await user.save();
 
     socket.emit('joined', user.username);
-    io.emit('system', `${user.username} chat me aa gaye`);
-    io.emit('userList', Object.values(onlineUsers).map(u => u.username));
+    // NOTE: yahan koi 'system' broadcast ya 'userList' emit nahi hota — silent hai
+  });
+
+  // ---------- ADDA ROOM (public) mein ENTER karna — sirf yahan presence reveal hoti hai ----------
+  socket.on('enterPublicRoom', () => {
+    if (!socket.username || !onlineUsers[socket.id]) return;
+    if (onlineUsers[socket.id].inPublicRoom) return; // already andar hai
+    onlineUsers[socket.id].inPublicRoom = true;
+    io.emit('system', `${socket.username} chat me aa gaye`);
+    io.emit('userList', publicRoomUsernames());
+  });
+
+  // ---------- ADDA ROOM se LEAVE (dusri chat pe switch karte waqt) ----------
+  socket.on('leavePublicRoom', () => {
+    if (!socket.username || !onlineUsers[socket.id]) return;
+    if (!onlineUsers[socket.id].inPublicRoom) return;
+    onlineUsers[socket.id].inPublicRoom = false;
+    io.emit('userList', publicRoomUsernames());
   });
 
   // ---------- PUBLIC MESSAGE (text/image/document/location) ----------
@@ -179,7 +214,8 @@ io.on('connection', (socket) => {
       mediaUrl: msgDoc.mediaUrl,
       mediaName: msgDoc.mediaName,
       location: msgDoc.location,
-      time
+      time,
+      read: false
     };
     const targetId = findSocketIdByUsername(toUsername);
     if (targetId) io.to(targetId).emit('privateMessage', payload);
@@ -193,8 +229,7 @@ io.on('connection', (socket) => {
       { room, readBy: { $ne: socket.userId } },
       { $addToSet: { readBy: socket.userId } }
     );
-    io.to(findSocketIdByUsername(socket.username) || socket.id).emit('readAck', { room });
-    // Doosre user ko bhi batao ki maine padh liya (blue-tick jaisa)
+    // Doosre user ko batao ki maine padh liya (blue-tick jaisa)
     const otherUsername = room.split('__').find(u => u !== socket.username);
     if (otherUsername) {
       const targetId = findSocketIdByUsername(otherUsername);
@@ -203,7 +238,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('typing', () => {
-    if (socket.username) socket.broadcast.emit('typing', socket.username);
+    if (socket.username && onlineUsers[socket.id]?.inPublicRoom) socket.broadcast.emit('typing', socket.username);
   });
 
   socket.on('privateTyping', (toUsername) => {
@@ -248,7 +283,6 @@ io.on('connection', (socket) => {
     if (targetId) io.to(targetId).emit('callReject', { fromUsername: socket.username });
   });
 
-  // Call ke beech audio <-> video switch karne ke liye (WhatsApp jaisa)
   socket.on('callTypeSwitch', ({ toUsername, offer, newType }) => {
     const targetId = findSocketIdByUsername(toUsername);
     if (targetId && socket.username) {
@@ -269,10 +303,14 @@ io.on('connection', (socket) => {
   // ---------- DISCONNECT ----------
   socket.on('disconnect', async () => {
     if (socket.username) {
-      io.emit('system', `${socket.username} chale gaye`);
-      io.emit('callEnd', { fromUsername: socket.username });
+      const wasInPublic = onlineUsers[socket.id]?.inPublicRoom;
       delete onlineUsers[socket.id];
-      io.emit('userList', Object.values(onlineUsers).map(u => u.username));
+
+      if (wasInPublic) {
+        io.emit('system', `${socket.username} chale gaye`);
+        io.emit('userList', publicRoomUsernames());
+      }
+      io.emit('callEnd', { fromUsername: socket.username });
 
       try {
         await User.findByIdAndUpdate(socket.userId, { isOnline: false, lastSeen: new Date() });
@@ -285,4 +323,3 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server chal raha hai: http://localhost:${PORT}`);
 });
-

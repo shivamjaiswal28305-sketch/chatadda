@@ -135,4 +135,6 @@
   color: #A6ACB3;
   margin-top: 24px;
   line-height: 1.5;
+}.join-screen.hidden {
+  display: none !important;
 }

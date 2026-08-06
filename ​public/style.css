@@ -523,4 +523,43 @@ body {
   color: #8696a0;
   letter-spacing: -2px;
 }
-.msg-ticks.read { color: #53bdeb; }
+.msg-ticks.read { color: #25D366; }
+
+/* ==================== SIDEBAR BACKDROP (mobile overlay) ==================== */
+.sidebar-backdrop { display: none; }
+@media (max-width: 720px) {
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    z-index: 45;
+  }
+}
+
+/* ==================== SAVED CONTACTS ==================== */
+.contact-remove-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+.contact-remove-btn:hover { color: #d33; }
+
+/* ==================== MESSAGE DELETE BUTTON ==================== */
+.msg.mine { padding-right: 30px; }
+.msg-delete-btn {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0.45;
+  padding: 2px;
+}
+.msg-delete-btn:hover { opacity: 1; }

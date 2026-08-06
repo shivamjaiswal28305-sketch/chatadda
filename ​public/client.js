@@ -27,11 +27,15 @@ const fileInput = document.getElementById('fileInput');
 const locationBtn = document.getElementById('locationBtn');
 const wallpaperBtn = document.getElementById('wallpaperBtn');
 const wallpaperPicker = document.getElementById('wallpaperPicker');
+const searchPhoneInput = document.getElementById('searchPhoneInput');
+const searchPhoneBtn = document.getElementById('searchPhoneBtn');
+const searchResult = document.getElementById('searchResult');
 
 // ==================== WALLPAPER ====================
 function getWallpaperKey(chat) { return `chatadda_wallpaper_${chat}`; }
 
 function applyWallpaper(chat) {
+  if (!chat) return;
   const saved = localStorage.getItem(getWallpaperKey(chat)) || 'default';
   messagesEl.className = 'messages' + (saved !== 'default' ? ` wallpaper-${saved}` : '');
   wallpaperPicker.querySelectorAll('.wallpaper-opt').forEach((btn) => {
@@ -45,6 +49,7 @@ wallpaperBtn.addEventListener('click', () => {
 
 wallpaperPicker.querySelectorAll('.wallpaper-opt').forEach((btn) => {
   btn.addEventListener('click', () => {
+    if (!currentChat) return;
     localStorage.setItem(getWallpaperKey(currentChat), btn.dataset.wallpaper);
     applyWallpaper(currentChat);
     wallpaperPicker.classList.add('hidden');
@@ -57,8 +62,8 @@ function getInitials(name) {
 }
 
 let myUsername = '';
-let currentChat = 'public';
-let onlineUsernames = [];
+let currentChat = null; // null = koi chat select nahi hui abhi
+let onlineUsernames = []; // sirf Adda Room ke andar wale log
 const conversations = { public: [] };
 let blockedUsers = new Set(JSON.parse(localStorage.getItem('chatadda_blocked') || '[]'));
 
@@ -141,7 +146,6 @@ function startSession() {
   if (socket.connected) {
     socket.emit('join', token);
   }
-  // socket.io connect hone par bhi join try hoga (see socket.on('connect'))
 }
 
 socket.on('connect', () => {
@@ -160,14 +164,23 @@ socket.on('disconnect', () => {
   if (myUsername) showToast('Connection toota — dobara jodne ki koshish ho rahi hai...');
 });
 
+// ---- Login/signup hone ke baad: SILENT — koi bhi turant "online" nahi dikhta ----
 socket.on('joined', (finalName) => {
   myUsername = finalName;
   joinScreen.classList.add('hidden');
   chatScreen.classList.remove('hidden');
-  loadHistory('public');
-  applyWallpaper('public');
-  messageInput.focus();
+  showEmptyState();
 });
+
+function showEmptyState() {
+  currentChat = null;
+  publicRoomBtn.classList.remove('active');
+  headerTitle.textContent = 'ChatAdda';
+  chatActions.classList.add('hidden');
+  messageForm.classList.add('hidden');
+  messagesEl.className = 'messages';
+  messagesEl.innerHTML = '<div class="empty-state">👋 Kisi chat pe ya Adda Room pe tap karo shuru karne ke liye</div>';
+}
 
 // Agar page load pe token already hai to seedha connect hone do (auto-login)
 if (getToken()) {
@@ -179,13 +192,13 @@ async function loadHistory(room) {
   try {
     const res = await fetch(`/api/messages/${encodeURIComponent(room)}`);
     const msgs = await res.json();
-    const target = room === 'public' ? conversations.public : (conversations[currentChat] || []);
     if (room === 'public') {
       conversations.public = msgs.map(m => ({
         username: m.fromUsername, type: m.type, text: m.text,
         mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
         time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
       }));
+      conversations.public._loaded = true;
       if (currentChat === 'public') renderMessages();
     }
   } catch (err) {
@@ -193,7 +206,7 @@ async function loadHistory(room) {
   }
 }
 
-// ==================== USER LIST / SWITCH CHAT ====================
+// ==================== USER LIST (sirf Adda Room ke andar wale) ====================
 socket.on('userList', (users) => {
   onlineUsernames = users;
   renderUserList();
@@ -215,15 +228,26 @@ function renderUserList() {
 }
 
 async function switchToChat(target) {
+  // Adda Room se bahar jaate waqt presence hata do
+  if (currentChat === 'public' && target !== 'public') {
+    socket.emit('leavePublicRoom');
+  }
+
   currentChat = target;
+  messageForm.classList.remove('hidden');
   publicRoomBtn.classList.toggle('active', target === 'public');
   headerTitle.textContent = target === 'public' ? 'Adda Room' : target;
   chatActions.classList.toggle('hidden', target === 'public');
-  if (target !== 'public') {
+
+  if (target === 'public') {
+    socket.emit('enterPublicRoom');
+    if (!conversations.public._loaded) {
+      await loadHistory('public');
+    }
+  } else {
     blockBtn.textContent = blockedUsers.has(target) ? '✅ Unblock' : '🚫 Block';
     blockBtn.classList.toggle('blocked-state', blockedUsers.has(target));
 
-    // Private chat history load karo (dono usernames sort karke room-id banta hai, server jaisa)
     const room = [myUsername, target].sort().join('__');
     if (!conversations[target] || conversations[target]._loaded !== true) {
       try {
@@ -232,7 +256,8 @@ async function switchToChat(target) {
         conversations[target] = msgs.map(m => ({
           from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
           type: m.type, text: m.text, mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
-          time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+          time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          read: m.readBy && m.readBy.length > 0
         }));
         conversations[target]._loaded = true;
       } catch (err) { /* ignore */ }
@@ -250,6 +275,43 @@ async function switchToChat(target) {
 
 publicRoomBtn.addEventListener('click', () => switchToChat('public'));
 
+// ==================== PHONE NUMBER SEARCH ====================
+searchPhoneBtn.addEventListener('click', doPhoneSearch);
+searchPhoneInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); doPhoneSearch(); }
+});
+
+async function doPhoneSearch() {
+  const phone = searchPhoneInput.value.trim();
+  if (!phone) return;
+  searchResult.classList.remove('hidden');
+  searchResult.innerHTML = '<p class="search-status">Dhoondh rahe hain...</p>';
+  try {
+    const res = await fetch(`/api/users/search?phone=${encodeURIComponent(phone)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      searchResult.innerHTML = `<p class="search-not-found">${escapeHtml(data.error || 'Nahi mila')}</p>`;
+      return;
+    }
+    if (data.username === myUsername) {
+      searchResult.innerHTML = `<p class="search-not-found">Ye to aapka hi number hai 🙂</p>`;
+      return;
+    }
+    searchResult.innerHTML = '';
+    const btn = document.createElement('button');
+    btn.className = 'search-found-btn';
+    btn.textContent = `💬 ${data.username} se chat karo`;
+    btn.addEventListener('click', () => {
+      searchResult.classList.add('hidden');
+      searchPhoneInput.value = '';
+      switchToChat(data.username);
+    });
+    searchResult.appendChild(btn);
+  } catch (err) {
+    searchResult.innerHTML = '<p class="search-not-found">Search fail hua, dobara try karo</p>';
+  }
+}
+
 // ==================== MESSAGE RENDERING ====================
 function renderMessages() {
   messagesEl.innerHTML = '';
@@ -266,6 +328,7 @@ function appendMessageToDOM(data) {
     messagesEl.appendChild(div);
     return;
   }
+  const isPrivate = !!data.from;
   const isMine = (data.username || data.from) === myUsername;
   const div = document.createElement('div');
   div.className = 'msg' + (isMine ? ' mine' : '');
@@ -282,10 +345,14 @@ function appendMessageToDOM(data) {
     bodyHtml = `<span class="msg-text">${escapeHtml(data.text)}</span>`;
   }
 
+  const ticksHtml = (isMine && isPrivate)
+    ? `<span class="msg-ticks${data.read ? ' read' : ''}">${data.read ? '✓✓' : '✓'}</span>`
+    : '';
+
   div.innerHTML = `
     ${isMine ? '' : `<span class="msg-user">${escapeHtml(data.username || data.from)}</span>`}
     ${bodyHtml}
-    <span class="msg-time">${data.time}</span>
+    <span class="msg-time">${data.time}${ticksHtml}</span>
   `;
   messagesEl.appendChild(div);
 }
@@ -313,8 +380,15 @@ socket.on('privateMessage', (data) => {
   }
 });
 
+// ---- Read receipts: doosre ne mera message padh liya ----
 socket.on('messagesRead', ({ byUsername }) => {
-  if (currentChat === byUsername) showToast(`${byUsername} ne padh liya ✓✓`);
+  const conv = conversations[byUsername];
+  if (conv) {
+    conv.forEach(m => { if (m.from === myUsername) m.read = true; });
+  }
+  if (currentChat === byUsername) {
+    renderMessages();
+  }
 });
 
 socket.on('typing', (username) => {
@@ -339,12 +413,13 @@ socket.on('reportReceived', (reportedUsername) => {
 messageForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = messageInput.value.trim();
-  if (!text) return;
+  if (!text || !currentChat) return;
   sendMessage({ type: 'text', text });
   messageInput.value = '';
 });
 
 function sendMessage(payload) {
+  if (!currentChat) return;
   if (currentChat === 'public') {
     socket.emit('chatMessage', payload);
   } else {
@@ -357,6 +432,7 @@ function sendMessage(payload) {
 }
 
 messageInput.addEventListener('input', () => {
+  if (!currentChat) return;
   if (currentChat === 'public') socket.emit('typing');
   else socket.emit('privateTyping', currentChat);
 });
@@ -403,7 +479,7 @@ locationBtn.addEventListener('click', () => {
 
 // ==================== BLOCK / REPORT ====================
 blockBtn.addEventListener('click', () => {
-  if (currentChat === 'public') return;
+  if (currentChat === 'public' || !currentChat) return;
   if (blockedUsers.has(currentChat)) {
     blockedUsers.delete(currentChat);
     showToast(`${currentChat} ko unblock kar diya`);
@@ -416,7 +492,7 @@ blockBtn.addEventListener('click', () => {
 });
 
 reportBtn.addEventListener('click', () => {
-  if (currentChat === 'public') return;
+  if (currentChat === 'public' || !currentChat) return;
   const reason = window.prompt(`${currentChat} ko report karne ki wajah likho (optional):`, '');
   if (reason === null) return;
   socket.emit('reportUser', { reportedUsername: currentChat, reason });
@@ -537,7 +613,7 @@ filterBar.querySelectorAll('.filter-btn').forEach((btn) => {
 });
 
 function updateCallButtonsVisibility() {
-  const showButtons = currentChat !== 'public' && !blockedUsers.has(currentChat);
+  const showButtons = currentChat && currentChat !== 'public' && !blockedUsers.has(currentChat);
   audioCallBtn.classList.toggle('hidden', !showButtons);
   videoCallBtn.classList.toggle('hidden', !showButtons);
 }
@@ -546,7 +622,7 @@ audioCallBtn.addEventListener('click', () => startCall('audio'));
 videoCallBtn.addEventListener('click', () => startCall('video'));
 
 async function startCall(type) {
-  if (currentChat === 'public') return;
+  if (currentChat === 'public' || !currentChat) return;
   if (peerConnection) { showToast('Aap pehle se call me ho.'); return; }
   currentCallWith = currentChat;
   currentCallType = type;
@@ -737,14 +813,12 @@ function cleanupCall() {
   toggleCamBtn.classList.remove('muted');
 }
 
-// ---- Call ke BEECH mein Audio <-> Video switch karna (WhatsApp jaisa) ----
 switchCallTypeBtn.addEventListener('click', async () => {
   if (!peerConnection || !currentCallWith) return;
   const goingToVideo = currentCallType !== 'video';
 
   try {
     if (goingToVideo) {
-      // Camera on karo aur peer connection me video track add karo
       const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
       const videoTrack = camStream.getVideoTracks()[0];
       rawLocalStream = rawLocalStream || camStream;
@@ -757,7 +831,6 @@ switchCallTypeBtn.addEventListener('click', async () => {
       localStream = rawLocalStream;
       currentCallType = 'video';
     } else {
-      // Video band karo, sirf audio track chalti rahegi
       const videoSender = peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
       if (videoSender && videoSender.track) videoSender.track.stop();
       if (videoSender) peerConnection.removeTrack(videoSender);
@@ -773,7 +846,6 @@ switchCallTypeBtn.addEventListener('click', async () => {
   }
 });
 
-// Doosre banda jab switch karta hai, ye event aata hai
 socket.on('callTypeSwitch', async ({ fromUsername, offer, newType }) => {
   if (!peerConnection || currentCallWith !== fromUsername) return;
   await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
@@ -805,4 +877,3 @@ toggleCamBtn.addEventListener('click', () => {
 });
 
 updateCallButtonsVisibility();
-

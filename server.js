@@ -14,6 +14,7 @@ const uploadRouter = require('./routes/upload');
 const app = express();
 const server = http.createServer(app);
 
+// CORS Configured for Live Deployments
 const io = new Server(server, {
   cors: {
     origin: process.env.CLIENT_URL || '*',
@@ -23,19 +24,23 @@ const io = new Server(server, {
 
 app.use(express.json());
 
+// Public static directories setup
 const publicDirName = fs.readdirSync(__dirname, { withFileTypes: true })
   .find(e => e.isDirectory() && e.name.replace(/[^\x20-\x7E]/g, '') === 'public')?.name || 'public';
 app.use(express.static(path.join(__dirname, publicDirName)));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chatadda';
 mongoose.connect(MONGODB_URI)
-  .then(() => console.log('MongoDB connected'))
+  .then(() => console.log('MongoDB connected successfully'))
   .catch((err) => console.error('MongoDB connection error:', err.message));
 
+// API Routes
 app.use('/api/auth', authRouter);
 app.use('/api/upload', uploadRouter);
 
+// Get Messages History
 app.get('/api/messages/:room', async (req, res) => {
   try {
     const messages = await Message.find({ room: req.params.room })
@@ -48,6 +53,7 @@ app.get('/api/messages/:room', async (req, res) => {
   }
 });
 
+// Get All Registered Users
 app.get('/api/users', async (req, res) => {
   try {
     const users = await User.find({}, 'username isOnline lastSeen photoUrl').lean();
@@ -57,6 +63,7 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
+// Search User By Phone
 app.get('/api/users/search', async (req, res) => {
   try {
     const phone = String(req.query.phone || '').trim();
@@ -71,6 +78,7 @@ app.get('/api/users/search', async (req, res) => {
   }
 });
 
+// Update Profile Picture (DP)
 app.post('/api/users/photo', async (req, res) => {
   try {
     const authHeader = req.headers.authorization || '';
@@ -97,6 +105,7 @@ app.post('/api/users/photo', async (req, res) => {
   }
 });
 
+// Socket Authentication Middleware
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token || socket.handshake.query?.token;
   if (!token) return next(new Error('Authentication error: Token missing'));
@@ -122,6 +131,7 @@ function cleanMessage(msg) {
 
 const ALLOWED_MSG_TYPES = ['text', 'image', 'document', 'location', 'audio', 'contact'];
 
+// --- SOCKET ENGINE ---
 io.on('connection', async (socket) => {
   try {
     const user = await User.findById(socket.userId);
@@ -131,7 +141,7 @@ io.on('connection', async (socket) => {
     }
 
     socket.username = user.username;
-    socket.join(user.username);
+    socket.join(user.username); // User private room
 
     user.isOnline = true;
     user.lastSeen = new Date();
@@ -140,6 +150,7 @@ io.on('connection', async (socket) => {
     socket.emit('joined', user.username);
     io.emit('presenceUpdate', { username: user.username, isOnline: true, lastSeen: user.lastSeen, photoUrl: user.photoUrl });
 
+    // Public Chat Room Logic
     socket.on('enterPublicRoom', () => {
       publicRoomUsers.add(socket.username);
       io.emit('system', `${socket.username} chat me aa gaye`);
@@ -151,6 +162,7 @@ io.on('connection', async (socket) => {
       io.emit('userList', Array.from(publicRoomUsers));
     });
 
+    // Send Public Message
     socket.on('chatMessage', async (data) => {
       try {
         const type = ALLOWED_MSG_TYPES.includes(data.type) ? data.type : 'text';
@@ -191,6 +203,7 @@ io.on('connection', async (socket) => {
       }
     });
 
+    // Send Private Message
     socket.on('privateMessage', async ({ toUsername, text, type, mediaUrl, mediaName, duration, location, contactName, contactPhone }) => {
       try {
         if (!toUsername) return;
@@ -241,6 +254,24 @@ io.on('connection', async (socket) => {
       }
     });
 
+    // --- WEBRTC CALLING SIGNALS (FIXED CALL ISSUE) ---
+    socket.on('callUser', ({ userToCall, signalData, from, isVideo }) => {
+      io.to(userToCall).emit('callUser', { signal: signalData, from, isVideo });
+    });
+
+    socket.on('answerCall', (data) => {
+      io.to(data.to).emit('callAccepted', data.signal);
+    });
+
+    socket.on('endCall', ({ to }) => {
+      io.to(to).emit('callEnded');
+    });
+
+    socket.on('iceCandidate', ({ to, candidate }) => {
+      io.to(to).emit('iceCandidate', candidate);
+    });
+
+    // Disconnect Handler
     socket.on('disconnect', async () => {
       if (socket.username) {
         publicRoomUsers.delete(socket.username);
@@ -257,6 +288,22 @@ io.on('connection', async (socket) => {
   } catch (err) {
     console.error('Socket connection error:', err.message);
   }
+});
+
+// --- RENDER FREE TIER KEEP-ALIVE SYSTEM ---
+setInterval(() => {
+  http.get(`http://localhost:${process.env.PORT || 3000}/api/users`, (res) => {
+    // Keeps node engine active
+  }).on('error', () => {});
+}, 300000); // Har 5 minute me self-ping
+
+// --- GLOBAL UNCAUGHT ERROR CATCHER (PREVENTS SERVER CRASH) ---
+process.on('uncaughtException', (err) => {
+  console.error('CRASH PREVENTED (Uncaught Exception):', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('CRASH PREVENTED (Unhandled Rejection):', reason);
 });
 
 const PORT = process.env.PORT || 3000;

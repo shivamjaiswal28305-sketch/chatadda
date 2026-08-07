@@ -4,14 +4,18 @@ const userSchema = new mongoose.Schema({
   username: {
     type: String,
     required: true,
+    unique: true,
     trim: true,
-    maxlength: 20
+    minlength: 3,
+    maxlength: 20,
+    index: true
   },
   phone: {
     type: String,
     required: true,
     unique: true,
-    trim: true
+    trim: true,
+    index: true
   },
   passwordHash: {
     type: String,
@@ -19,7 +23,8 @@ const userSchema = new mongoose.Schema({
   },
   isOnline: {
     type: Boolean,
-    default: false
+    default: false,
+    index: true
   },
   lastSeen: {
     type: Date,

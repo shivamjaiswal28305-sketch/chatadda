@@ -421,7 +421,7 @@ async function loadHistory(room) {
       conversations.public = msgs.map(m => ({
         _id: m._id, username: m.fromUsername, type: m.type, text: m.text,
         mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
-        deleted: !!m.deleted, edited: !!m.edited,
+        deleted: !!m.deleted, edited: !!m.edited, reactions: m.reactions || [],
         time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
       }));
       conversations.public._loaded = true;
@@ -495,7 +495,7 @@ async function switchToChat(target) {
         conversations[target] = msgs.map(m => ({
           _id: m._id, from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
           type: m.type, text: m.text, mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
-          deleted: !!m.deleted, edited: !!m.edited,
+          deleted: !!m.deleted, edited: !!m.edited, reactions: m.reactions || [],
           time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           read: m.readBy && m.readBy.length > 0
         }));
@@ -584,6 +584,7 @@ function appendMessageToDOM(data) {
   const isMine = (data.username || data.from) === myUsername;
   const div = document.createElement('div');
   div.className = 'msg' + (isMine ? ' mine' : '');
+  if (data._id) div.dataset.msgId = String(data._id);
 
   let bodyHtml = '';
   if (data.deleted) {
@@ -610,26 +611,114 @@ function appendMessageToDOM(data) {
     <span class="msg-time">${data.time}${ticksHtml}</span>
   `;
 
-  if (isMine && !data.deleted) {
+  if (!data.deleted) {
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
-    if (data.type === 'text') {
-      const editBtn = document.createElement('button');
-      editBtn.title = 'Edit';
-      editBtn.textContent = '✏️';
-      editBtn.addEventListener('click', () => editMessageInline(data));
-      actions.appendChild(editBtn);
+
+    const reactBtn = document.createElement('button');
+    reactBtn.title = 'React';
+    reactBtn.textContent = '😊';
+    reactBtn.addEventListener('click', (e) => openReactionPicker(e, data));
+    actions.appendChild(reactBtn);
+
+    if (isMine) {
+      if (data.type === 'text') {
+        const editBtn = document.createElement('button');
+        editBtn.title = 'Edit';
+        editBtn.textContent = '✏️';
+        editBtn.addEventListener('click', () => editMessageInline(data));
+        actions.appendChild(editBtn);
+      }
+      const delBtn = document.createElement('button');
+      delBtn.title = 'Delete for Everyone';
+      delBtn.textContent = '🗑';
+      delBtn.addEventListener('click', () => deleteMessageEveryone(data));
+      actions.appendChild(delBtn);
     }
-    const delBtn = document.createElement('button');
-    delBtn.title = 'Delete for Everyone';
-    delBtn.textContent = '🗑';
-    delBtn.addEventListener('click', () => deleteMessageEveryone(data));
-    actions.appendChild(delBtn);
     div.appendChild(actions);
+  }
+
+  if (data.reactions && data.reactions.length > 0) {
+    div.appendChild(buildReactionsRow(data));
   }
 
   messagesEl.appendChild(div);
 }
+
+// ==================== MESSAGE REACTIONS ====================
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+let activeReactionPicker = null;
+
+function closeReactionPickerOnOutsideClick(e) {
+  if (activeReactionPicker && !activeReactionPicker.contains(e.target)) {
+    closeReactionPicker();
+  }
+}
+
+function closeReactionPicker() {
+  if (activeReactionPicker) {
+    activeReactionPicker.remove();
+    activeReactionPicker = null;
+  }
+  document.removeEventListener('click', closeReactionPickerOnOutsideClick);
+}
+
+function openReactionPicker(event, data) {
+  event.stopPropagation();
+  closeReactionPicker();
+  if (!data._id) { showToast('Ye purana message react nahi ho sakta'); return; }
+
+  const picker = document.createElement('div');
+  picker.className = 'reaction-picker';
+  REACTION_EMOJIS.forEach((emoji) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = emoji;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sendReaction(data._id, emoji);
+      closeReactionPicker();
+    });
+    picker.appendChild(btn);
+  });
+
+  event.currentTarget.parentElement.appendChild(picker);
+  activeReactionPicker = picker;
+  setTimeout(() => document.addEventListener('click', closeReactionPickerOnOutsideClick), 0);
+}
+
+function sendReaction(messageId, emoji) {
+  socket.emit('reactMessage', { messageId, emoji });
+}
+
+function buildReactionsRow(data) {
+  const row = document.createElement('div');
+  row.className = 'reactions-row';
+  const counts = {};
+  data.reactions.forEach((r) => { counts[r.emoji] = (counts[r.emoji] || 0) + 1; });
+  Object.keys(counts).forEach((emoji) => {
+    const pill = document.createElement('span');
+    pill.className = 'reaction-pill';
+    const isMineReaction = data.reactions.some((r) => r.emoji === emoji && r.username === myUsername);
+    if (isMineReaction) pill.classList.add('mine-reaction');
+    pill.textContent = `${emoji} ${counts[emoji]}`;
+    pill.addEventListener('click', () => sendReaction(data._id, emoji));
+    row.appendChild(pill);
+  });
+  return row;
+}
+
+function findMessageInConversations(messageId, room) {
+  const list = conversationListForRoom(room);
+  if (!list) return null;
+  return list.find((m) => String(m._id) === String(messageId));
+}
+
+socket.on('messageReaction', ({ messageId, room, reactions }) => {
+  const msg = findMessageInConversations(messageId, room);
+  if (msg) msg.reactions = reactions;
+  if (isCurrentChatForRoom(room)) renderMessages();
+});
 
 socket.on('system', (text) => {
   conversations.public.push({ system: true, text });

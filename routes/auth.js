@@ -33,7 +33,7 @@ router.post('/signup', async (req, res) => {
     if (!phone || phone.length < 8 || phone.length > 15) {
       return res.status(400).json({ error: 'Sahi phone number daalo' });
     }
-    if (!password || password.length < 6) {
+    if (!password || password.length < 4) {
       return res.status(400).json({ error: 'Password kam se kam 6 characters ka hona chahiye' });
     }
 

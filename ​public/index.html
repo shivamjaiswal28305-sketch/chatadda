@@ -48,7 +48,16 @@
       <div class="sidebar-head">
         <img src="logo.svg" alt="ChatAdda" class="brand-logo-mini">
         <span>ChatAdda</span>
+        <button id="themeToggleBtn" class="logout-btn theme-toggle-btn" title="Dark/Light Mode">🌙</button>
         <button id="logoutBtn" class="logout-btn" title="Logout">⏻</button>
+      </div>
+
+      <div class="my-profile-row">
+        <button id="myAvatarBtn" class="my-avatar-btn" title="DP badlo">
+          <span id="myAvatarInitial">?</span>
+        </button>
+        <span class="my-profile-label">Apna DP badalne ke liye tap karo</span>
+        <input id="avatarFileInput" type="file" accept="image/*" hidden>
       </div>
 
       <!-- Phone number se dhoondo -->
@@ -75,7 +84,11 @@
     <main class="chat-main">
       <header class="chat-header">
         <button id="menuBtn" class="menu-btn" aria-label="Users">☰</button>
-        <div class="header-title" id="headerTitle">ChatAdda</div>
+        <img id="headerAvatar" class="header-avatar hidden" alt="">
+        <div class="header-title-wrap">
+          <div class="header-title" id="headerTitle">ChatAdda</div>
+          <div class="header-subtitle" id="headerSubtitle"></div>
+        </div>
         <div id="typingIndicator" class="typing-indicator"></div>
         <div id="chatActions" class="chat-actions hidden">
           <button id="audioCallBtn" class="action-btn" title="Audio Call">📞</button>

@@ -2,9 +2,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let socket = null;
   let currentToken = localStorage.getItem('chatToken') || null;
   let myUsername = localStorage.getItem('chatUsername') || null;
-  let currentChatRoom = 'public'; // 'public' ya private username
+  let currentChatRoom = 'public'; // 'public' or private room
 
-  // DOM Elements - Auth & Screens
+  // --- 1. DOM ELEMENTS ---
   const joinScreen = document.getElementById('joinScreen');
   const chatScreen = document.getElementById('chatScreen');
   const loginTabBtn = document.getElementById('loginTabBtn');
@@ -13,39 +13,48 @@ document.addEventListener('DOMContentLoaded', () => {
   const signupForm = document.getElementById('signupForm');
   const authError = document.getElementById('authError');
 
-  // Auth Inputs
+  // Inputs
   const loginPhone = document.getElementById('loginPhone');
   const loginPassword = document.getElementById('loginPassword');
   const signupUsername = document.getElementById('signupUsername');
   const signupPhone = document.getElementById('signupPhone');
   const signupPassword = document.getElementById('signupPassword');
 
-  // Sidebar & Search Elements
+  // Navigation & Mobile Controls
+  const menuBtn = document.getElementById('menuBtn');
+  const sidebar = document.querySelector('.sidebar');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  const themeToggleBtn = document.getElementById('themeToggleBtn');
   const logoutBtn = document.getElementById('logoutBtn');
-  const userList = document.getElementById('userList');
-  const publicRoomBtn = document.getElementById('publicRoomBtn');
+
+  // Search & Contact Lists
   const searchPhoneInput = document.getElementById('searchPhoneInput');
   const searchPhoneBtn = document.getElementById('searchPhoneBtn');
   const searchResult = document.getElementById('searchResult');
+  const publicRoomBtn = document.getElementById('publicRoomBtn');
+  const userList = document.getElementById('userList');
+  const savedContactsSection = document.getElementById('savedContactsSection');
+  const savedContactsList = document.getElementById('savedContactsList');
 
-  // Chat Area & Headers
+  // Chat Area
   const messagesDiv = document.getElementById('messages');
   const messageForm = document.getElementById('messageForm');
   const messageInput = document.getElementById('messageInput');
   const headerTitle = document.getElementById('headerTitle');
+  const headerSubtitle = document.getElementById('headerSubtitle');
   const chatActions = document.getElementById('chatActions');
 
-  // Attachment & Voice Elements
+  // Attachments & Record
   const plusBtn = document.getElementById('plusBtn');
   const attachMenu = document.getElementById('attachMenu');
   const attachBtn = document.getElementById('attachBtn');
   const fileInput = document.getElementById('fileInput');
+  const locationBtn = document.getElementById('locationBtn');
+  const contactBtn = document.getElementById('contactBtn');
   const sendBtn = document.getElementById('sendBtn');
   const micBtn = document.getElementById('micBtn');
 
-  // Calls & Themes Elements
-  const videoCallBtn = document.getElementById('videoCallBtn');
-  const audioCallBtn = document.getElementById('audioCallBtn');
+  // Pickers & Menus
   const moreOptionsBtn = document.getElementById('moreOptionsBtn');
   const moreOptionsMenu = document.getElementById('moreOptionsMenu');
   const wallpaperBtn = document.getElementById('wallpaperBtn');
@@ -53,7 +62,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const wallpaperPicker = document.getElementById('wallpaperPicker');
   const themePicker = document.getElementById('themePicker');
 
-  // 1. Auth Tabs Switch
+  // Call Modals
+  const videoCallBtn = document.getElementById('videoCallBtn');
+  const audioCallBtn = document.getElementById('audioCallBtn');
+  const incomingCallModal = document.getElementById('incomingCallModal');
+  const activeCallOverlay = document.getElementById('activeCallOverlay');
+  const endCallBtn = document.getElementById('endCallBtn');
+
+  // Image Editor Elements
+  const imageEditorOverlay = document.getElementById('imageEditorOverlay');
+  const editorCancelBtn = document.getElementById('editorCancelBtn');
+  const editorSendBtn = document.getElementById('editorSendBtn');
+
+  // --- 2. AUTHENTICATION TAB & TOGGLE ---
   if (loginTabBtn && signupTabBtn) {
     loginTabBtn.addEventListener('click', () => {
       loginTabBtn.classList.add('active');
@@ -84,12 +105,11 @@ document.addEventListener('DOMContentLoaded', () => {
     authError.classList.add('hidden');
   }
 
-  // 2. Login Handler
+  // Login
   if (loginForm) {
     loginForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       hideError();
-
       const phone = loginPhone.value.trim();
       const password = loginPassword.value.trim();
 
@@ -100,27 +120,24 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ phone, password })
         });
         const data = await res.json();
-
         if (!res.ok) return showError(data.error || 'Login me dikkat aayi');
 
         currentToken = data.token;
         myUsername = data.username;
         localStorage.setItem('chatToken', currentToken);
         localStorage.setItem('chatUsername', myUsername);
-
-        initChatEngine();
+        initChatSession();
       } catch (err) {
         showError('Server connect nahi ho raha hai.');
       }
     });
   }
 
-  // 3. Signup Handler
+  // Signup
   if (signupForm) {
     signupForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       hideError();
-
       const username = signupUsername.value.trim();
       const phone = signupPhone.value.trim();
       const password = signupPassword.value.trim();
@@ -132,27 +149,57 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ username, phone, password })
         });
         const data = await res.json();
-
-        if (!res.ok) return showError(data.error || 'Signup me dikkat aayi');
+        if (!res.ok) return showError(data.error || 'Signup fail hua');
 
         currentToken = data.token;
         myUsername = data.username;
         localStorage.setItem('chatToken', currentToken);
         localStorage.setItem('chatUsername', myUsername);
-
-        initChatEngine();
+        initChatSession();
       } catch (err) {
         showError('Server connect nahi ho raha hai.');
       }
     });
   }
 
-  // 4. Initialize Main Engine
-  function initChatEngine() {
+  // --- 3. MOBILE SIDEBAR TOGGLE & NAVIGATION ---
+  function openSidebar() {
+    if (sidebar) sidebar.classList.add('open');
+    if (sidebarBackdrop) sidebarBackdrop.classList.remove('hidden');
+  }
+
+  function closeSidebar() {
+    if (sidebar) sidebar.classList.remove('open');
+    if (sidebarBackdrop) sidebarBackdrop.classList.add('hidden');
+  }
+
+  if (menuBtn) menuBtn.onclick = openSidebar;
+  if (sidebarBackdrop) sidebarBackdrop.onclick = closeSidebar;
+
+  // Dark/Light Mode Switcher
+  if (themeToggleBtn) {
+    themeToggleBtn.onclick = () => {
+      document.body.classList.toggle('dark-mode');
+      const isDark = document.body.classList.contains('dark-mode');
+      themeToggleBtn.textContent = isDark ? '☀️' : '🌙';
+    };
+  }
+
+  // Logout
+  if (logoutBtn) {
+    logoutBtn.onclick = () => {
+      localStorage.clear();
+      location.reload();
+    };
+  }
+
+  // --- 4. CHAT ENGINE & SOCKET SETUP ---
+  function initChatSession() {
     if (!currentToken) return;
 
     if (joinScreen) joinScreen.classList.add('hidden');
     if (chatScreen) chatScreen.classList.remove('hidden');
+    if (messageForm) messageForm.classList.remove('hidden');
 
     socket = io({
       auth: { token: currentToken }
@@ -160,11 +207,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     socket.on('connect', () => {
       socket.emit('enterPublicRoom');
-      loadUsersSidebar();
+      loadUsersList();
       switchChatRoom('public');
     });
 
-    // Real-time Chat Receivers
     socket.on('chatMessage', (msg) => {
       if (currentChatRoom === 'public') appendMessage(msg);
     });
@@ -176,12 +222,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    socket.on('presenceUpdate', loadUsersSidebar);
+    socket.on('presenceUpdate', loadUsersList);
 
     socket.on('system', (sysMsg) => {
       if (currentChatRoom === 'public') {
         const div = document.createElement('div');
-        div.style.cssText = 'text-align: center; margin: 8px 0; font-size: 11px; color: #888; font-style: italic;';
+        div.className = 'system-msg';
+        div.style.cssText = 'text-align: center; margin: 8px 0; font-size: 12px; color: #777; font-style: italic;';
         div.textContent = sysMsg;
         messagesDiv.appendChild(div);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -189,7 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 5. Phone Search & User List (Private Chat Feature)
+  // --- 5. SEARCH PHONE & USER DIRECTORY ---
   if (searchPhoneBtn && searchPhoneInput) {
     searchPhoneBtn.addEventListener('click', async () => {
       const phone = searchPhoneInput.value.trim();
@@ -201,18 +248,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (res.ok) {
           searchResult.innerHTML = `
-            <div style="padding: 10px; background: #e8f5e9; border-radius: 8px; cursor: pointer;" id="startChatUser">
-              💬 <strong>${data.username}</strong> ke saath chat start karein
+            <div style="padding: 10px; background: rgba(37,211,102,0.15); border-radius: 8px; cursor: pointer; margin: 8px 0;" id="startSearchedChat">
+              💬 <strong>${data.username}</strong> ke saath chat karein
             </div>`;
           searchResult.classList.remove('hidden');
 
-          document.getElementById('startChatUser').onclick = () => {
+          document.getElementById('startSearchedChat').onclick = () => {
             startPrivateChat(data.username);
             searchResult.classList.add('hidden');
             searchPhoneInput.value = '';
           };
         } else {
-          searchResult.innerHTML = `<div style="padding: 10px; color: red;">${data.error}</div>`;
+          searchResult.innerHTML = `<div style="padding: 8px; color: red; font-size: 13px;">${data.error}</div>`;
           searchResult.classList.remove('hidden');
         }
       } catch (e) {
@@ -221,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  async function loadUsersSidebar() {
+  async function loadUsersList() {
     if (!userList) return;
 
     try {
@@ -235,13 +282,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (u.username === myUsername) return;
 
         const li = document.createElement('li');
-        li.style.cssText = 'padding: 12px; cursor: pointer; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;';
-        
-        const onlineTag = u.isOnline 
-          ? '<span style="color: #2e7d32; font-size: 11px; font-weight: bold;">● Online</span>' 
-          : '<span style="color: #999; font-size: 11px;">Offline</span>';
-        
-        li.innerHTML = `<span>👤 <strong>${u.username}</strong></span> ${onlineTag}`;
+        li.className = 'room-item';
+        li.style.cssText = 'padding: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(0,0,0,0.05);';
+
+        const statusTag = u.isOnline 
+          ? '<span style="color: #25D366; font-size: 11px; font-weight: bold;">● Online</span>' 
+          : '<span style="color: #888; font-size: 11px;">Offline</span>';
+
+        li.innerHTML = `<span>👤 <strong>${u.username}</strong></span> ${statusTag}`;
         li.onclick = () => startPrivateChat(u.username);
         userList.appendChild(li);
       });
@@ -250,7 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 6. Switch Between Rooms
+  // --- 6. ROOM SWITCHING (PUBLIC VS PRIVATE) ---
   if (publicRoomBtn) {
     publicRoomBtn.onclick = () => switchChatRoom('public');
   }
@@ -263,19 +311,22 @@ document.addEventListener('DOMContentLoaded', () => {
   function switchChatRoom(room, displayName) {
     currentChatRoom = room;
     messagesDiv.innerHTML = '';
+    closeSidebar(); // Close mobile sidebar automatically on select
 
     if (room === 'public') {
       if (headerTitle) headerTitle.textContent = 'Adda Room (Public)';
+      if (headerSubtitle) headerSubtitle.textContent = 'Sabhi log live hain';
       if (chatActions) chatActions.classList.add('hidden');
     } else {
-      if (headerTitle) headerTitle.textContent = displayName || room.replace(myUsername, '').replace('__', '');
+      const name = displayName || room.replace(myUsername, '').replace('__', '');
+      if (headerTitle) headerTitle.textContent = name;
+      if (headerSubtitle) headerSubtitle.textContent = 'Private Chat';
       if (chatActions) chatActions.classList.remove('hidden');
     }
 
     loadRoomHistory(room);
   }
 
-  // 7. Load Room History
   async function loadRoomHistory(room) {
     try {
       const res = await fetch(`/api/messages/${room}`, {
@@ -290,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 8. File Uploads & Attachments
+  // --- 7. ATTACHMENTS & IMAGE EDITOR INTEGRATION ---
   if (plusBtn && attachMenu) {
     plusBtn.onclick = () => attachMenu.classList.toggle('hidden');
   }
@@ -307,34 +358,94 @@ document.addEventListener('DOMContentLoaded', () => {
       const file = fileInput.files[0];
       if (!file) return;
 
-      const formData = new FormData();
-      formData.append('file', file);
-
-      try {
-        const res = await fetch('/api/upload', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${currentToken}` },
-          body: formData
-        });
-        const data = await res.json();
-
-        if (res.ok && socket) {
-          const payload = { type: data.type, mediaUrl: data.url, mediaName: data.name };
-          if (currentChatRoom === 'public') {
-            socket.emit('chatMessage', payload);
-          } else {
-            const toUsername = currentChatRoom.replace(myUsername, '').replace('__', '');
-            socket.emit('privateMessage', { toUsername, ...payload });
-          }
+      // Agar Photo hai, toh Photo Editor overlay kholo
+      if (file.type.startsWith('image/')) {
+        if (imageEditorOverlay) imageEditorOverlay.classList.remove('hidden');
+        // Editor Send Button Logic
+        if (editorSendBtn) {
+          editorSendBtn.onclick = async () => {
+            if (imageEditorOverlay) imageEditorOverlay.classList.add('hidden');
+            await uploadAndSendFile(file);
+          };
         }
-      } catch (e) {
-        alert('File upload nahi ho saka.');
+      } else {
+        await uploadAndSendFile(file);
       }
       fileInput.value = '';
     };
   }
 
-  // 9. Input & Send Handling
+  if (editorCancelBtn && imageEditorOverlay) {
+    editorCancelBtn.onclick = () => imageEditorOverlay.classList.add('hidden');
+  }
+
+  async function uploadAndSendFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${currentToken}` },
+        body: formData
+      });
+      const data = await res.json();
+
+      if (res.ok && socket) {
+        const payload = { type: data.type, mediaUrl: data.url, mediaName: data.name };
+        if (currentChatRoom === 'public') {
+          socket.emit('chatMessage', payload);
+        } else {
+          const toUsername = currentChatRoom.replace(myUsername, '').replace('__', '');
+          socket.emit('privateMessage', { toUsername, ...payload });
+        }
+      }
+    } catch (e) {
+      alert('File send nahi ho saki');
+    }
+  }
+
+  // Location Sharing Feature
+  if (locationBtn) {
+    locationBtn.onclick = () => {
+      attachMenu.classList.add('hidden');
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          const locText = `📍 Location: https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
+          sendTextMessage(locText);
+        }, () => alert('Location permission refused or error'));
+      }
+    };
+  }
+
+  // Contact Sharing
+  if (contactBtn) {
+    contactBtn.onclick = () => {
+      attachMenu.classList.add('hidden');
+      const modal = document.getElementById('contactFormModal');
+      if (modal) modal.classList.remove('hidden');
+    };
+  }
+
+  const contactFormCancel = document.getElementById('contactFormCancel');
+  const contactFormSend = document.getElementById('contactFormSend');
+  if (contactFormCancel) {
+    contactFormCancel.onclick = () => {
+      document.getElementById('contactFormModal').classList.add('hidden');
+    };
+  }
+  if (contactFormSend) {
+    contactFormSend.onclick = () => {
+      const cName = document.getElementById('contactNameInput').value.trim();
+      const cPhone = document.getElementById('contactPhoneInput').value.trim();
+      if (cName && cPhone) {
+        sendTextMessage(`👤 Contact: ${cName} (${cPhone})`);
+        document.getElementById('contactFormModal').classList.add('hidden');
+      }
+    };
+  }
+
+  // --- 8. MESSAGE INPUT & RENDERING ---
   if (messageInput && sendBtn && micBtn) {
     messageInput.oninput = () => {
       if (messageInput.value.trim().length > 0) {
@@ -351,22 +462,25 @@ document.addEventListener('DOMContentLoaded', () => {
     messageForm.onsubmit = (e) => {
       e.preventDefault();
       const text = messageInput.value.trim();
-      if (!text || !socket) return;
+      if (!text) return;
 
-      if (currentChatRoom === 'public') {
-        socket.emit('chatMessage', { type: 'text', text });
-      } else {
-        const toUsername = currentChatRoom.replace(myUsername, '').replace('__', '');
-        socket.emit('privateMessage', { toUsername, type: 'text', text });
-      }
-
+      sendTextMessage(text);
       messageInput.value = '';
       sendBtn.classList.add('hidden');
       micBtn.classList.remove('hidden');
     };
   }
 
-  // 10. Message Display UI (WhatsApp Style)
+  function sendTextMessage(text) {
+    if (!socket) return;
+    if (currentChatRoom === 'public') {
+      socket.emit('chatMessage', { type: 'text', text });
+    } else {
+      const toUsername = currentChatRoom.replace(myUsername, '').replace('__', '');
+      socket.emit('privateMessage', { toUsername, type: 'text', text });
+    }
+  }
+
   function appendMessage(msg) {
     const senderName = msg.username || msg.from;
     const isMe = senderName === myUsername;
@@ -380,6 +494,7 @@ document.addEventListener('DOMContentLoaded', () => {
       clear: both;
       float: ${isMe ? 'right' : 'left'};
       background: ${isMe ? '#dcf8c6' : '#ffffff'};
+      color: #333;
       box-shadow: 0 1px 2px rgba(0,0,0,0.15);
       font-family: sans-serif;
     `;
@@ -398,12 +513,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const link = document.createElement('a');
       link.href = msg.mediaUrl;
       link.target = '_blank';
-      link.style.cssText = 'color: #0277bd; text-decoration: none; font-weight: bold;';
+      link.style.cssText = 'color: #0277bd; text-decoration: underline; font-weight: bold;';
       link.textContent = `📄 ${msg.mediaName || 'Document'}`;
       msgCard.appendChild(link);
     } else {
       const txt = document.createElement('p');
-      txt.style.cssText = 'margin: 0; word-break: break-word; font-size: 14px; color: #333;';
+      txt.style.cssText = 'margin: 0; word-break: break-word; font-size: 14px;';
       txt.textContent = msg.text || '';
       msgCard.appendChild(txt);
     }
@@ -412,7 +527,7 @@ document.addEventListener('DOMContentLoaded', () => {
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
   }
 
-  // 11. Extra UI Actions (Calls, Wallpapers & Theme)
+  // --- 9. WALLPAPER, THEMES & CALL MODALS ---
   if (moreOptionsBtn && moreOptionsMenu) {
     moreOptionsBtn.onclick = () => moreOptionsMenu.classList.toggle('hidden');
   }
@@ -420,30 +535,56 @@ document.addEventListener('DOMContentLoaded', () => {
   if (wallpaperBtn && wallpaperPicker) {
     wallpaperBtn.onclick = () => {
       wallpaperPicker.classList.toggle('hidden');
-      moreOptionsMenu.classList.add('hidden');
+      if (moreOptionsMenu) moreOptionsMenu.classList.add('hidden');
     };
   }
 
   if (themeBtn && themePicker) {
     themeBtn.onclick = () => {
       themePicker.classList.toggle('hidden');
-      moreOptionsMenu.classList.add('hidden');
+      if (moreOptionsMenu) moreOptionsMenu.classList.add('hidden');
     };
   }
 
-  if (videoCallBtn) videoCallBtn.onclick = () => alert('Video Call connect ho raha hai...');
-  if (audioCallBtn) audioCallBtn.onclick = () => alert('Audio Call connect ho raha hai...');
+  // Wallpapers Option Click
+  document.querySelectorAll('.wallpaper-opt').forEach(btn => {
+    btn.onclick = () => {
+      const bg = btn.style.background;
+      if (messagesDiv) messagesDiv.style.background = bg;
+      if (wallpaperPicker) wallpaperPicker.classList.add('hidden');
+    };
+  });
 
-  // Logout
-  if (logoutBtn) {
-    logoutBtn.onclick = () => {
-      localStorage.clear();
-      location.reload();
+  // Theme Option Click
+  document.querySelectorAll('.theme-opt').forEach(btn => {
+    btn.onclick = () => {
+      const theme = btn.getAttribute('data-theme');
+      document.body.setAttribute('data-theme', theme);
+      if (themePicker) themePicker.classList.add('hidden');
+    };
+  });
+
+  // Calling Feature Triggers
+  if (videoCallBtn) {
+    videoCallBtn.onclick = () => {
+      if (activeCallOverlay) activeCallOverlay.classList.remove('hidden');
     };
   }
 
-  // Check Existing Session
+  if (audioCallBtn) {
+    audioCallBtn.onclick = () => {
+      if (activeCallOverlay) activeCallOverlay.classList.remove('hidden');
+    };
+  }
+
+  if (endCallBtn) {
+    endCallBtn.onclick = () => {
+      if (activeCallOverlay) activeCallOverlay.classList.add('hidden');
+    };
+  }
+
+  // Auto Session Resume
   if (currentToken && myUsername) {
-    initChatEngine();
+    initChatSession();
   }
 });

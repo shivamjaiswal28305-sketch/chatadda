@@ -525,6 +525,73 @@ body {
 }
 .msg-ticks.read { color: #25D366; }
 
+/* ==================== DARK MODE ==================== */
+body.dark-mode {
+  background: #0b141a;
+  color: #e9edef;
+}
+body.dark-mode .chat-screen { background: #111b21; }
+body.dark-mode .sidebar {
+  background: #111b21;
+  border-right-color: #222d34;
+}
+body.dark-mode .sidebar-head {
+  background: #202c33;
+  border-bottom-color: #222d34;
+  color: #e9edef;
+}
+body.dark-mode .room-item {
+  background: #111b21;
+  border-bottom-color: #222d34;
+  color: #e9edef;
+}
+body.dark-mode .room-item:hover,
+body.dark-mode .room-item.active { background: #202c33; }
+body.dark-mode .online-label { color: #8696a0; }
+body.dark-mode .user-list li {
+  border-bottom-color: #222d34;
+  color: #e9edef;
+}
+body.dark-mode .user-list li:hover,
+body.dark-mode .user-list li.active-chat { background: #202c33; }
+body.dark-mode .chat-header {
+  background: #202c33;
+  border-bottom-color: #222d34;
+  color: #e9edef;
+}
+body.dark-mode .header-title { color: #e9edef; }
+body.dark-mode .messages { background: #0b141a; }
+body.dark-mode .msg {
+  background: #202c33;
+  color: #e9edef;
+}
+body.dark-mode .msg.mine { background: #005c4b; }
+body.dark-mode .msg-time { color: #8696a0; }
+body.dark-mode .message-form {
+  background: #202c33;
+  border-top-color: #222d34;
+}
+body.dark-mode .message-form input[type="text"] {
+  background: #2a3942;
+  color: #e9edef;
+}
+body.dark-mode .search-box input {
+  background: #2a3942;
+  color: #e9edef;
+  border-color: #2a3942;
+}
+body.dark-mode .search-box input::placeholder { color: #8696a0; }
+body.dark-mode .wallpaper-picker {
+  background: #202c33;
+  color: #e9edef;
+}
+body.dark-mode .theme-toggle-btn { color: #e9edef; }
+body.dark-mode .my-profile-row { border-bottom-color: #222d34; }
+body.dark-mode .my-profile-label { color: #8696a0; }
+body.dark-mode .header-subtitle { color: #8696a0; }
+body.dark-mode .msg-deleted-text,
+body.dark-mode .edited-tag { color: #8696a0; }
+
 /* ==================== SIDEBAR BACKDROP (mobile overlay) ==================== */
 .sidebar-backdrop { display: none; }
 @media (max-width: 720px) {
@@ -549,12 +616,16 @@ body {
 }
 .contact-remove-btn:hover { color: #d33; }
 
-/* ==================== MESSAGE DELETE BUTTON ==================== */
-.msg.mine { padding-right: 30px; }
-.msg-delete-btn {
+/* ==================== MESSAGE ACTIONS (edit / delete) ==================== */
+.msg.mine { padding-right: 44px; }
+.msg-actions {
   position: absolute;
-  top: 4px;
-  right: 6px;
+  top: 2px;
+  right: 4px;
+  display: flex;
+  gap: 2px;
+}
+.msg-actions button {
   background: none;
   border: none;
   cursor: pointer;
@@ -562,4 +633,40 @@ body {
   opacity: 0.45;
   padding: 2px;
 }
-.msg-delete-btn:hover { opacity: 1; }
+.msg-actions button:hover { opacity: 1; }
+.msg-deleted-text { font-style: italic; color: #8696a0; }
+.edited-tag { font-size: 10px; color: #8696a0; font-style: italic; margin-left: 4px; }
+
+/* ==================== AVATARS / PROFILE PHOTO ==================== */
+.mini-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0;
+}
+.mini-avatar-initial {
+  background: #25D366; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px;
+}
+.header-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  object-fit: cover; flex-shrink: 0;
+}
+.header-avatar.hidden { display: none; }
+.header-title-wrap { flex: 1; display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.header-subtitle { font-size: 12px; color: #667781; }
+.header-subtitle.online { color: #25D366; font-weight: 600; }
+
+.my-profile-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.my-avatar-btn {
+  width: 46px; height: 46px; border-radius: 50%;
+  border: none; background: #25D366; color: #fff;
+  font-weight: 700; font-size: 16px; cursor: pointer;
+  overflow: hidden; padding: 0; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.my-avatar-btn img { width: 100%; height: 100%; object-fit: cover; }
+.my-profile-label { font-size: 12px; color: #667781; }

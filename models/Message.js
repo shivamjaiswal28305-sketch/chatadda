@@ -54,6 +54,24 @@ const messageSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  replyTo: {
+    messageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Message'
+    },
+    fromUsername: {
+      type: String,
+      default: ''
+    },
+    type: {
+      type: String,
+      default: 'text'
+    },
+    text: {
+      type: String,
+      default: ''
+    }
+  },
   readBy: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

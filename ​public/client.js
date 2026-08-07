@@ -254,14 +254,14 @@ let presenceMap = {}; // username -> { isOnline, lastSeen, photoUrl }
 function getAvatarHtml(username) {
   const p = presenceMap[username];
   if (p && p.photoUrl) {
-    return `<img src="${p.photoUrl}" class="mini-avatar" alt="${escapeHtml(username)}">`;
+    return `<img src="${escapeHtml(p.photoUrl)}" class="mini-avatar" alt="${escapeHtml(username)}">`;
   }
   return `<span class="mini-avatar mini-avatar-initial">${getInitials(username)}</span>`;
 }
 
 function setMyAvatar(url) {
   if (url) {
-    myAvatarBtn.innerHTML = `<img src="${url}" alt="Mera DP">`;
+    myAvatarBtn.innerHTML = `<img src="${escapeHtml(url)}" alt="Mera DP">`;
   } else {
     myAvatarBtn.innerHTML = `<span id="myAvatarInitial">${getInitials(myUsername)}</span>`;
   }

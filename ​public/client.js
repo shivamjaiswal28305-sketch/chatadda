@@ -1,5 +1,4 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // Socket.io initialization
   let socket = null;
   let currentToken = localStorage.getItem('chatToken') || null;
   let myUsername = localStorage.getItem('chatUsername') || null;
@@ -13,172 +12,230 @@ document.addEventListener('DOMContentLoaded', () => {
   const signupForm = document.getElementById('signupForm');
   const authError = document.getElementById('authError');
 
-  // DOM Elements - Inputs
+  // Inputs
   const loginPhone = document.getElementById('loginPhone');
   const loginPassword = document.getElementById('loginPassword');
   const signupUsername = document.getElementById('signupUsername');
   const signupPhone = document.getElementById('signupPhone');
   const signupPassword = document.getElementById('signupPassword');
 
-  // DOM Elements - UI & Messaging
+  // Chat UI Elements
   const logoutBtn = document.getElementById('logoutBtn');
   const messagesDiv = document.getElementById('messages');
   const messageForm = document.getElementById('messageForm');
   const messageInput = document.getElementById('messageInput');
   const headerTitle = document.getElementById('headerTitle');
   const publicRoomBtn = document.getElementById('publicRoomBtn');
+  const plusBtn = document.getElementById('plusBtn');
+  const attachMenu = document.getElementById('attachMenu');
+  const attachBtn = document.getElementById('attachBtn');
+  const fileInput = document.getElementById('fileInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const micBtn = document.getElementById('micBtn');
 
-  // ------- Auth Tab Switching -------
-  loginTabBtn.addEventListener('click', () => {
-    loginTabBtn.classList.add('active');
-    signupTabBtn.classList.remove('active');
-    loginForm.classList.remove('hidden');
-    signupForm.classList.add('hidden');
-    hideError();
-  });
+  // Auth Tab Toggle
+  if (loginTabBtn && signupTabBtn) {
+    loginTabBtn.addEventListener('click', () => {
+      loginTabBtn.classList.add('active');
+      signupTabBtn.classList.remove('active');
+      loginForm.classList.remove('hidden');
+      signupForm.classList.add('hidden');
+      hideError();
+    });
 
-  signupTabBtn.addEventListener('click', () => {
-    signupTabBtn.classList.add('active');
-    loginTabBtn.classList.remove('active');
-    signupForm.classList.remove('hidden');
-    loginForm.classList.add('hidden');
-    hideError();
-  });
+    signupTabBtn.addEventListener('click', () => {
+      signupTabBtn.classList.add('active');
+      loginTabBtn.classList.remove('active');
+      signupForm.classList.remove('hidden');
+      loginForm.classList.add('hidden');
+      hideError();
+    });
+  }
 
   function showError(msg) {
+    if (!authError) return;
     authError.textContent = msg;
     authError.classList.remove('hidden');
   }
 
   function hideError() {
+    if (!authError) return;
     authError.textContent = '';
     authError.classList.add('hidden');
   }
 
-  // ------- LOGIN HANDLE -------
-  loginForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    hideError();
+  // Handle Login
+  if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideError();
 
-    const phone = loginPhone.value.trim();
-    const password = loginPassword.value.trim();
+      const phone = loginPhone.value.trim();
+      const password = loginPassword.value.trim();
 
-    if (!phone || !password) {
-      showError('Phone number aur password dono bharein');
-      return;
-    }
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, password })
+        });
+        const data = await res.json();
 
-    try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, password })
-      });
+        if (!res.ok) return showError(data.error || 'Login fail hua');
 
-      const data = await res.json();
+        currentToken = data.token;
+        myUsername = data.username;
+        localStorage.setItem('chatToken', currentToken);
+        localStorage.setItem('chatUsername', myUsername);
 
-      if (!res.ok) {
-        showError(data.error || 'Login fail hua. Sahi details daalein.');
-        return;
+        initChatSession();
+      } catch (err) {
+        showError('Server error, please try again');
       }
+    });
+  }
 
-      // Save credentials and connect
-      currentToken = data.token;
-      myUsername = data.username;
-      localStorage.setItem('chatToken', currentToken);
-      localStorage.setItem('chatUsername', myUsername);
+  // Handle Signup
+  if (signupForm) {
+    signupForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      hideError();
 
-      initChatSession();
-    } catch (err) {
-      console.error(err);
-      showError('Server connect nahi ho pa raha hai. Dobara try karein.');
-    }
-  });
+      const username = signupUsername.value.trim();
+      const phone = signupPhone.value.trim();
+      const password = signupPassword.value.trim();
 
-  // ------- SIGNUP HANDLE -------
-  signupForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    hideError();
+      try {
+        const res = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, phone, password })
+        });
+        const data = await res.json();
 
-    const username = signupUsername.value.trim();
-    const phone = signupPhone.value.trim();
-    const password = signupPassword.value.trim();
+        if (!res.ok) return showError(data.error || 'Signup fail hua');
 
-    if (!username || !phone || !password) {
-      showError('Sabhi details bharna zaroori hai');
-      return;
-    }
+        currentToken = data.token;
+        myUsername = data.username;
+        localStorage.setItem('chatToken', currentToken);
+        localStorage.setItem('chatUsername', myUsername);
 
-    try {
-      const res = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, phone, password })
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        showError(data.error || 'Account nahi ban saka.');
-        return;
+        initChatSession();
+      } catch (err) {
+        showError('Server error, please try again');
       }
+    });
+  }
 
-      // Save credentials and connect
-      currentToken = data.token;
-      myUsername = data.username;
-      localStorage.setItem('chatToken', currentToken);
-      localStorage.setItem('chatUsername', myUsername);
-
-      initChatSession();
-    } catch (err) {
-      console.error(err);
-      showError('Server connect nahi ho pa raha hai.');
-    }
-  });
-
-  // ------- START CHAT SESSION & SOCKET -------
+  // Init Socket Chat
   function initChatSession() {
     if (!currentToken) return;
 
-    // Show Chat Screen, Hide Auth Screen
-    joinScreen.classList.add('hidden');
-    chatScreen.classList.remove('hidden');
+    if (joinScreen) joinScreen.classList.add('hidden');
+    if (chatScreen) chatScreen.classList.remove('hidden');
+    if (messageForm) messageForm.classList.remove('hidden');
 
-    // Connect Socket.io with Auth Token
     socket = io({
       auth: { token: currentToken }
     });
 
     socket.on('connect', () => {
-      console.log('Connected to socket server');
       socket.emit('enterPublicRoom');
       loadRoomHistory('public');
     });
 
-    socket.on('connect_error', (err) => {
-      console.error('Socket Auth Error:', err.message);
-      handleLogout();
-    });
+    socket.on('chatMessage', appendMessage);
+    socket.on('privateMessage', appendMessage);
 
-    // Incoming public messages
-    socket.on('chatMessage', (msg) => {
-      appendMessage(msg);
-    });
-
-    // System notifications
     socket.on('system', (sysMsg) => {
-      const p = document.createElement('div');
-      p.className = 'system-message';
-      p.textContent = sysMsg;
-      messagesDiv.appendChild(p);
+      const div = document.createElement('div');
+      div.className = 'system-message';
+      div.style.textAlign = 'center';
+      div.style.margin = '8px 0';
+      div.style.fontSize = '12px';
+      div.style.color = '#666';
+      div.textContent = sysMsg;
+      messagesDiv.appendChild(div);
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     });
   }
 
-  // ------- LOAD CHAT HISTORY -------
+  // Toggle Attachment Menu
+  if (plusBtn && attachMenu) {
+    plusBtn.addEventListener('click', () => {
+      attachMenu.classList.toggle('hidden');
+    });
+  }
+
+  if (attachBtn && fileInput) {
+    attachBtn.addEventListener('click', () => {
+      fileInput.click();
+      attachMenu.classList.add('hidden');
+    });
+  }
+
+  // Handle File Upload
+  if (fileInput) {
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${currentToken}` },
+          body: formData
+        });
+        const data = await res.json();
+
+        if (res.ok && socket) {
+          socket.emit('chatMessage', {
+            type: data.type,
+            mediaUrl: data.url,
+            mediaName: data.name
+          });
+        }
+      } catch (e) {
+        alert('File upload fail ho gaya');
+      }
+      fileInput.value = '';
+    });
+  }
+
+  // Toggle Send/Mic Button
+  if (messageInput && sendBtn && micBtn) {
+    messageInput.addEventListener('input', () => {
+      if (messageInput.value.trim().length > 0) {
+        sendBtn.classList.remove('hidden');
+        micBtn.classList.add('hidden');
+      } else {
+        sendBtn.classList.add('hidden');
+        micBtn.classList.remove('hidden');
+      }
+    });
+  }
+
+  // Send Message
+  if (messageForm) {
+    messageForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = messageInput.value.trim();
+      if (!text || !socket) return;
+
+      socket.emit('chatMessage', { type: 'text', text });
+      messageInput.value = '';
+      sendBtn.classList.add('hidden');
+      micBtn.classList.remove('hidden');
+    });
+  }
+
+  // Fetch History
   async function loadRoomHistory(room) {
     messagesDiv.innerHTML = '';
-    headerTitle.textContent = room === 'public' ? 'Adda Room (Public)' : room;
+    if (headerTitle) headerTitle.textContent = room === 'public' ? 'Adda Room (Public)' : room;
 
     try {
       const res = await fetch(`/api/messages/${room}`, {
@@ -189,52 +246,67 @@ document.addEventListener('DOMContentLoaded', () => {
         history.forEach(appendMessage);
       }
     } catch (e) {
-      console.error('History error:', e);
+      console.error(e);
     }
   }
 
-  // ------- APPEND MESSAGE TO UI -------
+  // Render Message UI
   function appendMessage(msg) {
+    const isMe = (msg.username || msg.from) === myUsername;
     const msgCard = document.createElement('div');
-    const isMe = msg.username === myUsername || msg.from === myUsername;
     msgCard.className = `message-card ${isMe ? 'my-message' : 'other-message'}`;
 
-    const author = document.createElement('strong');
-    author.textContent = isMe ? 'Aap' : (msg.username || msg.from);
-    
-    const textNode = document.createElement('p');
-    textNode.textContent = msg.text || '';
+    // Styling
+    msgCard.style.margin = '6px 12px';
+    msgCard.style.padding = '8px 12px';
+    msgCard.style.borderRadius = '12px';
+    msgCard.style.maxWidth = '75%';
+    msgCard.style.clear = 'both';
+    msgCard.style.float = isMe ? 'right' : 'left';
+    msgCard.style.background = isMe ? '#dcf8c6' : '#ffffff';
+    msgCard.style.boxShadow = '0 1px 2px rgba(0,0,0,0.15)';
 
-    msgCard.appendChild(author);
-    msgCard.appendChild(textNode);
+    const sender = document.createElement('div');
+    sender.style.fontWeight = 'bold';
+    sender.style.fontSize = '12px';
+    sender.style.color = '#075e54';
+    sender.style.marginBottom = '3px';
+    sender.textContent = isMe ? 'Aap' : (msg.username || msg.from);
+    msgCard.appendChild(sender);
+
+    if (msg.type === 'image' && msg.mediaUrl) {
+      const img = document.createElement('img');
+      img.src = msg.mediaUrl;
+      img.style.maxWidth = '100%';
+      img.style.borderRadius = '8px';
+      msgCard.appendChild(img);
+    } else if (msg.type === 'document' && msg.mediaUrl) {
+      const link = document.createElement('a');
+      link.href = msg.mediaUrl;
+      link.target = '_blank';
+      link.textContent = `📄 ${msg.mediaName || 'Document'}`;
+      msgCard.appendChild(link);
+    } else {
+      const txt = document.createElement('p');
+      txt.style.margin = '0';
+      txt.style.wordBreak = 'break-word';
+      txt.textContent = msg.text || '';
+      msgCard.appendChild(txt);
+    }
+
     messagesDiv.appendChild(msgCard);
-
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
   }
 
-  // ------- SEND MESSAGE -------
-  messageForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const text = messageInput.value.trim();
-    if (!text || !socket) return;
-
-    socket.emit('chatMessage', { type: 'text', text });
-    messageInput.value = '';
-  });
-
-  // ------- LOGOUT HANDLE -------
-  function handleLogout() {
-    localStorage.removeItem('chatToken');
-    localStorage.removeItem('chatUsername');
-    if (socket) socket.disconnect();
-    location.reload();
-  }
-
+  // Logout
   if (logoutBtn) {
-    logoutBtn.addEventListener('click', handleLogout);
+    logoutBtn.addEventListener('click', () => {
+      localStorage.clear();
+      location.reload();
+    });
   }
 
-  // Check if session already exists on page refresh
+  // Check auto-login
   if (currentToken && myUsername) {
     initChatSession();
   }

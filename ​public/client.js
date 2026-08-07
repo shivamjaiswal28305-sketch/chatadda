@@ -39,6 +39,9 @@ const avatarFileInput = document.getElementById('avatarFileInput');
 const headerAvatar = document.getElementById('headerAvatar');
 const headerSubtitle = document.getElementById('headerSubtitle');
 const micBtn = document.getElementById('micBtn');
+const sendBtn = document.getElementById('sendBtn');
+const plusBtn = document.getElementById('plusBtn');
+const attachMenu = document.getElementById('attachMenu');
 const recordingBar = document.getElementById('recordingBar');
 const recordingTimer = document.getElementById('recordingTimer');
 const contactBtn = document.getElementById('contactBtn');
@@ -876,6 +879,7 @@ messageForm.addEventListener('submit', (e) => {
   if (!text || !currentChat) return;
   sendMessage({ type: 'text', text });
   messageInput.value = '';
+  updateSendMicVisibility();
 });
 
 function sendMessage(payload) {
@@ -895,6 +899,29 @@ messageInput.addEventListener('input', () => {
   if (!currentChat) return;
   if (currentChat === 'public') socket.emit('typing');
   else socket.emit('privateTyping', currentChat);
+});
+
+// ==================== MIC / SEND TOGGLE (WhatsApp-style — dono kabhi ek saath nahi dikhte) ====================
+function updateSendMicVisibility() {
+  const hasText = messageInput.value.trim().length > 0;
+  sendBtn.classList.toggle('hidden', !hasText);
+  micBtn.classList.toggle('hidden', hasText);
+}
+messageInput.addEventListener('input', updateSendMicVisibility);
+updateSendMicVisibility();
+
+// ==================== "+" ATTACH MENU (Photo/Document, Location, Contact ek jagah) ====================
+plusBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  attachMenu.classList.toggle('hidden');
+});
+document.addEventListener('click', () => {
+  attachMenu.classList.add('hidden');
+});
+['attachBtn', 'locationBtn', 'contactBtn'].forEach((id) => {
+  document.getElementById(id).addEventListener('click', () => {
+    attachMenu.classList.add('hidden');
+  });
 });
 
 // ==================== MEDIA UPLOAD (image / document) ====================
@@ -1241,12 +1268,32 @@ editorCancelBtn.addEventListener('click', () => {
   setEditorTool(null);
 });
 
-editorSendBtn.addEventListener('click', async () => {
-  if (!editorImage || !currentChat) return;
-  const finalCanvas = flattenComposite();
-  imageEditorOverlay.classList.add('hidden');
+editorSendBtn.addEventListener('click', () => {
+  if (!editorImage || !currentChat) {
+    showToast('Photo ya chat select nahi hai');
+    return;
+  }
+
+  let finalCanvas;
+  try {
+    finalCanvas = flattenComposite();
+  } catch (err) {
+    console.error('Editor flatten error:', err);
+    showToast('Photo process karne mein dikkat aayi, dobara try karo');
+    return;
+  }
+
+  if (!finalCanvas.width || !finalCanvas.height) {
+    showToast('Photo ka size sahi nahi hai — crop thoda bada karo');
+    return;
+  }
 
   finalCanvas.toBlob(async (blob) => {
+    if (!blob) {
+      showToast('Photo taiyar nahi ho paayi, dobara try karo');
+      return;
+    }
+    imageEditorOverlay.classList.add('hidden');
     const formData = new FormData();
     formData.append('file', blob, `photo-${Date.now()}.png`);
     showToast('Photo bhej rahe hain...');
@@ -1256,7 +1303,8 @@ editorSendBtn.addEventListener('click', async () => {
       if (!res.ok) { showToast(data.error || 'Upload fail hua'); return; }
       sendMessage({ type: 'image', mediaUrl: data.url, mediaName: data.name });
     } catch (err) {
-      showToast('Upload fail hua');
+      console.error('Photo upload error:', err);
+      showToast('Upload fail hua, internet check karo');
     }
     editorImage = null;
     setEditorTool(null);

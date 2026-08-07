@@ -44,6 +44,10 @@ const messageSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }],
+  reactions: [{
+    username: { type: String, required: true },
+    emoji: { type: String, required: true }
+  }],
   deleted: {
     type: Boolean,
     default: false

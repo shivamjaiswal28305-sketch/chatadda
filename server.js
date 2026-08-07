@@ -46,28 +46,56 @@ app.get('/api/messages/:room', async (req, res) => {
   }
 });
 
-// All registered users (for contacts/search — phase 2 me UI banega)
+// All registered users (for contacts/search + profile photo/last seen cache)
 app.get('/api/users', async (req, res) => {
   try {
-    const users = await User.find({}, 'username isOnline lastSeen').lean();
+    const users = await User.find({}, 'username isOnline lastSeen photoUrl').lean();
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: 'Users load nahi ho paye' });
   }
 });
 
-// Phone number se exact user search — sirf username return karta hai, phone kabhi expose nahi hota
+// Phone number se exact user search — sirf username+photo return karta hai, phone kabhi expose nahi hota
 app.get('/api/users/search', async (req, res) => {
   try {
     const phone = String(req.query.phone || '').trim();
     if (!phone) return res.status(400).json({ error: 'Phone number do' });
 
-    const user = await User.findOne({ phone }, 'username').lean();
+    const user = await User.findOne({ phone }, 'username photoUrl').lean();
     if (!user) return res.status(404).json({ error: 'Ye number ChatAdda pe registered nahi hai' });
 
-    res.json({ username: user.username });
+    res.json({ username: user.username, photoUrl: user.photoUrl || '' });
   } catch (err) {
     res.status(500).json({ error: 'Search fail hua' });
+  }
+});
+
+// Apna profile photo (DP) update karo — pehle /api/upload se file upload karo, phir uska URL yahan bhejo
+app.post('/api/users/photo', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '').trim();
+    const payload = verifyToken(token);
+    if (!payload) return res.status(401).json({ error: 'Session expire ho gaya, dobara login karo' });
+
+    const { photoUrl } = req.body;
+    if (!photoUrl) return res.status(400).json({ error: 'Photo URL do' });
+
+    const user = await User.findByIdAndUpdate(payload.userId, { photoUrl }, { new: true });
+    if (!user) return res.status(404).json({ error: 'User nahi mila' });
+
+    // Sabko turant naya DP dikhao
+    io.emit('presenceUpdate', {
+      username: user.username,
+      isOnline: user.isOnline,
+      lastSeen: user.lastSeen,
+      photoUrl: user.photoUrl
+    });
+
+    res.json({ photoUrl: user.photoUrl });
+  } catch (err) {
+    res.status(500).json({ error: 'DP update fail hua' });
   }
 });
 
@@ -95,6 +123,18 @@ function publicRoomUsernames() {
 // Private room id: dono usernames ko sort karke jodo, taaki dono taraf se same room-id bane
 function privateRoomId(u1, u2) {
   return [u1, u2].sort().join('__');
+}
+
+// Ek message jis room ka hai, uske sab participants ko event bhejo (public = sabko, private = dono taraf)
+function broadcastToRoom(room, event, payload) {
+  if (room === 'public') {
+    io.emit(event, payload);
+    return;
+  }
+  room.split('__').forEach((u) => {
+    const sid = findSocketIdByUsername(u);
+    if (sid) io.to(sid).emit(event, payload);
+  });
 }
 
 const reportsFile = path.join(__dirname, 'reports.json');
@@ -133,6 +173,8 @@ io.on('connection', (socket) => {
     await user.save();
 
     socket.emit('joined', user.username);
+    // Global presence: iske contacts/private-chat wale sab jagah "Online" dikhega, sirf Adda Room ke andar nahi
+    io.emit('presenceUpdate', { username: user.username, isOnline: true, lastSeen: user.lastSeen, photoUrl: user.photoUrl });
     // NOTE: yahan koi 'system' broadcast ya 'userList' emit nahi hota — silent hai
   });
 
@@ -178,6 +220,8 @@ io.on('connection', (socket) => {
       mediaUrl: msgDoc.mediaUrl,
       mediaName: msgDoc.mediaName,
       location: msgDoc.location,
+      deleted: false,
+      edited: false,
       time: new Date(msgDoc.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
     });
   });
@@ -214,12 +258,52 @@ io.on('connection', (socket) => {
       mediaUrl: msgDoc.mediaUrl,
       mediaName: msgDoc.mediaName,
       location: msgDoc.location,
+      deleted: false,
+      edited: false,
       time,
       read: false
     };
     const targetId = findSocketIdByUsername(toUsername);
     if (targetId) io.to(targetId).emit('privateMessage', payload);
     socket.emit('privateMessage', payload);
+  });
+
+  // ---------- EDIT MESSAGE (sirf apna, sirf text type) ----------
+  socket.on('editMessage', async ({ messageId, newText }) => {
+    if (!socket.userId || !messageId) return;
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg) return;
+      if (String(msg.fromUser) !== socket.userId) return; // sirf apna message edit kar sakte ho
+      if (msg.type !== 'text' || msg.deleted) return;
+
+      const cleaned = cleanMessage(String(newText || '').slice(0, 500));
+      if (!cleaned.trim()) return;
+      msg.text = cleaned;
+      msg.edited = true;
+      await msg.save();
+
+      broadcastToRoom(msg.room, 'messageEdited', { messageId: String(msg._id), room: msg.room, newText: cleaned });
+    } catch (err) { /* ignore */ }
+  });
+
+  // ---------- DELETE FOR EVERYONE (sirf apna message) ----------
+  socket.on('deleteMessageForEveryone', async ({ messageId }) => {
+    if (!socket.userId || !messageId) return;
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg) return;
+      if (String(msg.fromUser) !== socket.userId) return; // sirf apna message delete kar sakte ho
+
+      msg.deleted = true;
+      msg.text = '';
+      msg.mediaUrl = '';
+      msg.mediaName = '';
+      msg.location = undefined;
+      await msg.save();
+
+      broadcastToRoom(msg.room, 'messageDeleted', { messageId: String(msg._id), room: msg.room });
+    } catch (err) { /* ignore */ }
   });
 
   // ---------- READ RECEIPTS ----------
@@ -312,9 +396,13 @@ io.on('connection', (socket) => {
       }
       io.emit('callEnd', { fromUsername: socket.username });
 
+      const seenAt = new Date();
       try {
-        await User.findByIdAndUpdate(socket.userId, { isOnline: false, lastSeen: new Date() });
+        await User.findByIdAndUpdate(socket.userId, { isOnline: false, lastSeen: seenAt });
       } catch (e) { /* ignore */ }
+
+      // Global presence: sabko "Last seen" turant update dikhao
+      io.emit('presenceUpdate', { username: socket.username, isOnline: false, lastSeen: seenAt });
     }
   });
 });

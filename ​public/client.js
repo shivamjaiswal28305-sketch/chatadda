@@ -9,6 +9,7 @@ const loginForm = document.getElementById('loginForm');
 const signupForm = document.getElementById('signupForm');
 const authError = document.getElementById('authError');
 const logoutBtn = document.getElementById('logoutBtn');
+const themeToggleBtn = document.getElementById('themeToggleBtn');
 
 const messagesEl = document.getElementById('messages');
 const messageForm = document.getElementById('messageForm');
@@ -33,6 +34,10 @@ const searchResult = document.getElementById('searchResult');
 const sidebarBackdrop = document.getElementById('sidebarBackdrop');
 const savedContactsSection = document.getElementById('savedContactsSection');
 const savedContactsList = document.getElementById('savedContactsList');
+const myAvatarBtn = document.getElementById('myAvatarBtn');
+const avatarFileInput = document.getElementById('avatarFileInput');
+const headerAvatar = document.getElementById('headerAvatar');
+const headerSubtitle = document.getElementById('headerSubtitle');
 
 // ==================== WALLPAPER ====================
 function getWallpaperKey(chat) { return `chatadda_wallpaper_${chat}`; }
@@ -64,6 +69,19 @@ function getInitials(name) {
   return name.trim().charAt(0).toUpperCase();
 }
 
+// ==================== DARK MODE ====================
+function applyTheme() {
+  const isDark = localStorage.getItem('chatadda_theme') === 'dark';
+  document.body.classList.toggle('dark-mode', isDark);
+  themeToggleBtn.textContent = isDark ? '☀️' : '🌙';
+}
+themeToggleBtn.addEventListener('click', () => {
+  const isDark = document.body.classList.contains('dark-mode');
+  localStorage.setItem('chatadda_theme', isDark ? 'light' : 'dark');
+  applyTheme();
+});
+applyTheme();
+
 // ==================== SAVED CONTACTS (localStorage) ====================
 function getContacts() {
   return JSON.parse(localStorage.getItem('chatadda_contacts') || '[]');
@@ -93,9 +111,10 @@ function renderSavedContacts() {
   list.forEach((u) => {
     const li = document.createElement('li');
     li.className = currentChat === u ? 'active-chat' : '';
+    li.innerHTML = getAvatarHtml(u);
     const nameSpan = document.createElement('span');
     nameSpan.className = 'uname';
-    nameSpan.textContent = `💬 ${u}`;
+    nameSpan.textContent = u;
     li.appendChild(nameSpan);
     const rmBtn = document.createElement('button');
     rmBtn.className = 'contact-remove-btn';
@@ -111,31 +130,159 @@ function renderSavedContacts() {
   });
 }
 
-// ==================== MESSAGE DELETE (delete for me — local) ====================
-function msgSignature(data) {
-  return `${data.time}|${data.text || data.mediaUrl || ''}|${data.username || data.from || ''}`;
-}
-function getHiddenMsgs() {
-  return new Set(JSON.parse(localStorage.getItem('chatadda_hidden_msgs') || '[]'));
-}
-function hideMsgPermanently(sig) {
-  const s = getHiddenMsgs();
-  s.add(sig);
-  localStorage.setItem('chatadda_hidden_msgs', JSON.stringify([...s]));
-}
-function filterHiddenMsgs(list) {
-  const hidden = getHiddenMsgs();
-  return list.filter((m) => hidden.has(msgSignature(m)) === false);
-}
-function deleteMessage(data, list) {
-  if (!confirm('Ye message delete karna hai?')) return;
-  hideMsgPermanently(msgSignature(data));
-  if (list) {
-    const idx = list.indexOf(data);
-    if (idx !== -1) list.splice(idx, 1);
-  }
+// ==================== MESSAGE EDIT / DELETE FOR EVERYONE (server-synced) ====================
+function deleteMessageEveryone(data) {
+  if (!data._id) { showToast('Ye purana message delete nahi ho sakta'); return; }
+  if (!confirm('Ye message SABKE liye delete karna hai?')) return;
+  socket.emit('deleteMessageForEveryone', { messageId: data._id });
+  data.deleted = true;
+  data.text = '';
+  data.mediaUrl = '';
+  data.mediaName = '';
   renderMessages();
 }
+
+function editMessageInline(data) {
+  if (!data._id) { showToast('Ye purana message edit nahi ho sakta'); return; }
+  const newText = window.prompt('Message edit karo:', data.text || '');
+  if (newText === null) return;
+  const trimmed = newText.trim();
+  if (!trimmed || trimmed === data.text) return;
+  socket.emit('editMessage', { messageId: data._id, newText: trimmed });
+  data.text = trimmed;
+  data.edited = true;
+  renderMessages();
+}
+
+function conversationListForRoom(room) {
+  if (room === 'public') return conversations.public;
+  const other = room.split('__').find((u) => u !== myUsername);
+  return other ? conversations[other] : null;
+}
+function isCurrentChatForRoom(room) {
+  if (room === 'public') return currentChat === 'public';
+  const other = room.split('__').find((u) => u !== myUsername);
+  return currentChat === other;
+}
+
+socket.on('messageDeleted', ({ messageId, room }) => {
+  const list = conversationListForRoom(room);
+  if (!list) return;
+  const msg = list.find((m) => String(m._id) === String(messageId));
+  if (msg) { msg.deleted = true; msg.text = ''; msg.mediaUrl = ''; msg.mediaName = ''; }
+  if (isCurrentChatForRoom(room)) renderMessages();
+});
+
+socket.on('messageEdited', ({ messageId, room, newText }) => {
+  const list = conversationListForRoom(room);
+  if (!list) return;
+  const msg = list.find((m) => String(m._id) === String(messageId));
+  if (msg) { msg.text = newText; msg.edited = true; }
+  if (isCurrentChatForRoom(room)) renderMessages();
+});
+
+// ==================== PROFILE PHOTO (DP) + PRESENCE (online / last seen) ====================
+let presenceMap = {}; // username -> { isOnline, lastSeen, photoUrl }
+
+function getAvatarHtml(username) {
+  const p = presenceMap[username];
+  if (p && p.photoUrl) {
+    return `<img src="${p.photoUrl}" class="mini-avatar" alt="${escapeHtml(username)}">`;
+  }
+  return `<span class="mini-avatar mini-avatar-initial">${getInitials(username)}</span>`;
+}
+
+function setMyAvatar(url) {
+  if (url) {
+    myAvatarBtn.innerHTML = `<img src="${url}" alt="Mera DP">`;
+  } else {
+    myAvatarBtn.innerHTML = `<span id="myAvatarInitial">${getInitials(myUsername)}</span>`;
+  }
+}
+
+async function loadAllUsersPresence() {
+  try {
+    const res = await fetch('/api/users');
+    const list = await res.json();
+    list.forEach((u) => {
+      presenceMap[u.username] = { isOnline: u.isOnline, lastSeen: u.lastSeen, photoUrl: u.photoUrl || '' };
+    });
+    if (presenceMap[myUsername]) setMyAvatar(presenceMap[myUsername].photoUrl);
+    renderUserList();
+    renderSavedContacts();
+    if (currentChat && currentChat !== 'public') updateHeaderPresence();
+  } catch (err) { /* ignore */ }
+}
+
+myAvatarBtn.addEventListener('click', () => avatarFileInput.click());
+avatarFileInput.addEventListener('change', async () => {
+  const file = avatarFileInput.files[0];
+  if (!file) return;
+  const formData = new FormData();
+  formData.append('file', file);
+  showToast('DP upload ho raha hai...');
+  try {
+    const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+    const uploadData = await uploadRes.json();
+    if (!uploadRes.ok) { showToast(uploadData.error || 'Upload fail hua'); avatarFileInput.value = ''; return; }
+
+    const res = await fetch('/api/users/photo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+      body: JSON.stringify({ photoUrl: uploadData.url })
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'DP update fail hua'); avatarFileInput.value = ''; return; }
+
+    setMyAvatar(data.photoUrl);
+    presenceMap[myUsername] = { ...(presenceMap[myUsername] || {}), photoUrl: data.photoUrl };
+    showToast('DP update ho gaya!');
+  } catch (err) {
+    showToast('DP update fail hua');
+  }
+  avatarFileInput.value = '';
+});
+
+function formatLastSeen(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return `aaj ${time}`;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return `kal ${time}`;
+  return `${d.toLocaleDateString('en-IN')} ${time}`;
+}
+
+function updateHeaderPresence() {
+  if (!currentChat || currentChat === 'public') {
+    headerSubtitle.textContent = '';
+    headerSubtitle.classList.remove('online');
+    return;
+  }
+  const p = presenceMap[currentChat];
+  if (p && p.isOnline) {
+    headerSubtitle.textContent = 'Online';
+    headerSubtitle.classList.add('online');
+  } else {
+    headerSubtitle.textContent = p && p.lastSeen ? `Last seen ${formatLastSeen(p.lastSeen)}` : '';
+    headerSubtitle.classList.remove('online');
+  }
+}
+
+socket.on('presenceUpdate', ({ username, isOnline, lastSeen, photoUrl }) => {
+  presenceMap[username] = {
+    ...(presenceMap[username] || {}),
+    isOnline,
+    lastSeen,
+    ...(photoUrl !== undefined ? { photoUrl } : {})
+  };
+  if (username === myUsername && photoUrl !== undefined) setMyAvatar(photoUrl);
+  renderUserList();
+  renderSavedContacts();
+  if (currentChat === username) updateHeaderPresence();
+});
 
 let myUsername = '';
 let currentChat = null; // null = koi chat select nahi hui abhi
@@ -247,6 +394,7 @@ socket.on('joined', (finalName) => {
   chatScreen.classList.remove('hidden');
   showEmptyState();
   renderSavedContacts();
+  loadAllUsersPresence();
 });
 
 function showEmptyState() {
@@ -270,11 +418,12 @@ async function loadHistory(room) {
     const res = await fetch(`/api/messages/${encodeURIComponent(room)}`);
     const msgs = await res.json();
     if (room === 'public') {
-      conversations.public = filterHiddenMsgs(msgs.map(m => ({
-        username: m.fromUsername, type: m.type, text: m.text,
+      conversations.public = msgs.map(m => ({
+        _id: m._id, username: m.fromUsername, type: m.type, text: m.text,
         mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
+        deleted: !!m.deleted, edited: !!m.edited,
         time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
-      })));
+      }));
       conversations.public._loaded = true;
       if (currentChat === 'public') renderMessages();
     }
@@ -298,7 +447,7 @@ function renderUserList() {
       const li = document.createElement('li');
       const isBlocked = blockedUsers.has(u);
       li.className = (currentChat === u ? 'active-chat' : '') + (isBlocked ? ' blocked' : '');
-      li.innerHTML = `<span class="online-dot"></span><span class="uname">${escapeHtml(u)}</span>${isBlocked ? '<span class="block-tag">Blocked</span>' : ''}`;
+      li.innerHTML = `${getAvatarHtml(u)}<span class="uname">${escapeHtml(u)}</span>${isBlocked ? '<span class="block-tag">Blocked</span>' : ''}`;
       li.addEventListener('click', () => switchToChat(u));
       userListEl.appendChild(li);
     });
@@ -317,6 +466,19 @@ async function switchToChat(target) {
   chatActions.classList.toggle('hidden', target === 'public');
 
   if (target === 'public') {
+    headerAvatar.classList.add('hidden');
+  } else {
+    const p = presenceMap[target];
+    if (p && p.photoUrl) {
+      headerAvatar.src = p.photoUrl;
+      headerAvatar.classList.remove('hidden');
+    } else {
+      headerAvatar.classList.add('hidden');
+    }
+  }
+  updateHeaderPresence();
+
+  if (target === 'public') {
     socket.emit('enterPublicRoom');
     if (!conversations.public._loaded) {
       await loadHistory('public');
@@ -330,12 +492,13 @@ async function switchToChat(target) {
       try {
         const res = await fetch(`/api/messages/${encodeURIComponent(room)}`);
         const msgs = await res.json();
-        conversations[target] = filterHiddenMsgs(msgs.map(m => ({
-          from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
+        conversations[target] = msgs.map(m => ({
+          _id: m._id, from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
           type: m.type, text: m.text, mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
+          deleted: !!m.deleted, edited: !!m.edited,
           time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           read: m.readBy && m.readBy.length > 0
-        })));
+        }));
         conversations[target]._loaded = true;
       } catch (err) { /* ignore */ }
     }
@@ -405,11 +568,11 @@ async function doPhoneSearch() {
 function renderMessages() {
   messagesEl.innerHTML = '';
   const list = conversations[currentChat] || [];
-  list.forEach((data) => appendMessageToDOM(data, list));
+  list.forEach((data) => appendMessageToDOM(data));
   scrollToBottom();
 }
 
-function appendMessageToDOM(data, list) {
+function appendMessageToDOM(data) {
   if (data.system) {
     const div = document.createElement('div');
     div.className = 'msg system';
@@ -423,7 +586,9 @@ function appendMessageToDOM(data, list) {
   div.className = 'msg' + (isMine ? ' mine' : '');
 
   let bodyHtml = '';
-  if (data.type === 'image') {
+  if (data.deleted) {
+    bodyHtml = `<span class="msg-text msg-deleted-text">🚫 Ye message delete kar diya gaya</span>`;
+  } else if (data.type === 'image') {
     bodyHtml = `<a href="${data.mediaUrl}" target="_blank"><img src="${data.mediaUrl}" class="msg-image" alt="image"></a>`;
   } else if (data.type === 'document') {
     bodyHtml = `<a href="${data.mediaUrl}" target="_blank" class="msg-doc">📄 ${escapeHtml(data.mediaName || 'Document')}</a>`;
@@ -431,11 +596,12 @@ function appendMessageToDOM(data, list) {
     const { lat, lng } = data.location;
     bodyHtml = `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" class="msg-location">📍 Location dekho</a>`;
   } else {
-    bodyHtml = `<span class="msg-text">${escapeHtml(data.text)}</span>`;
+    bodyHtml = `<span class="msg-text">${escapeHtml(data.text)}</span>${data.edited ? '<span class="edited-tag">(edited)</span>' : ''}`;
   }
 
+  const delivered = isMine && isPrivate ? !!(presenceMap[data.to] && presenceMap[data.to].isOnline) : false;
   const ticksHtml = (isMine && isPrivate)
-    ? `<span class="msg-ticks${data.read ? ' read' : ''}">${data.read ? '✓✓' : '✓'}</span>`
+    ? `<span class="msg-ticks${data.read ? ' read' : ''}">${data.read ? '✓✓' : (delivered ? '✓✓' : '✓')}</span>`
     : '';
 
   div.innerHTML = `
@@ -444,13 +610,22 @@ function appendMessageToDOM(data, list) {
     <span class="msg-time">${data.time}${ticksHtml}</span>
   `;
 
-  if (isMine) {
+  if (isMine && !data.deleted) {
+    const actions = document.createElement('div');
+    actions.className = 'msg-actions';
+    if (data.type === 'text') {
+      const editBtn = document.createElement('button');
+      editBtn.title = 'Edit';
+      editBtn.textContent = '✏️';
+      editBtn.addEventListener('click', () => editMessageInline(data));
+      actions.appendChild(editBtn);
+    }
     const delBtn = document.createElement('button');
-    delBtn.className = 'msg-delete-btn';
-    delBtn.title = 'Delete';
+    delBtn.title = 'Delete for Everyone';
     delBtn.textContent = '🗑';
-    delBtn.addEventListener('click', () => deleteMessage(data, list));
-    div.appendChild(delBtn);
+    delBtn.addEventListener('click', () => deleteMessageEveryone(data));
+    actions.appendChild(delBtn);
+    div.appendChild(actions);
   }
 
   messagesEl.appendChild(div);
@@ -464,7 +639,7 @@ socket.on('system', (text) => {
 socket.on('chatMessage', (data) => {
   if (blockedUsers.has(data.username)) return;
   conversations.public.push(data);
-  if (currentChat === 'public') { appendMessageToDOM(data, conversations.public); scrollToBottom(); }
+  if (currentChat === 'public') { appendMessageToDOM(data); scrollToBottom(); }
 });
 
 socket.on('privateMessage', (data) => {
@@ -473,7 +648,7 @@ socket.on('privateMessage', (data) => {
   if (!conversations[otherParty]) conversations[otherParty] = [];
   conversations[otherParty].push(data);
   if (currentChat === otherParty) {
-    appendMessageToDOM(data, conversations[otherParty]);
+    appendMessageToDOM(data);
     scrollToBottom();
     socket.emit('markRead', { room: [myUsername, otherParty].sort().join('__') });
   }

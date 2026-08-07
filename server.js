@@ -223,7 +223,7 @@ io.on('connection', (socket) => {
       deleted: false,
       edited: false,
       reactions: [],
-      time: new Date(msgDoc.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      createdAt: msgDoc.createdAt
     });
   });
 
@@ -249,7 +249,6 @@ io.on('connection', (socket) => {
       location: location || undefined
     });
 
-    const time = new Date(msgDoc.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
     const payload = {
       _id: msgDoc._id,
       from: socket.username,
@@ -262,7 +261,7 @@ io.on('connection', (socket) => {
       deleted: false,
       edited: false,
       reactions: [],
-      time,
+      createdAt: msgDoc.createdAt,
       read: false
     };
     const targetId = findSocketIdByUsername(toUsername);

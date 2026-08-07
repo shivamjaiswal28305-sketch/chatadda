@@ -222,6 +222,7 @@ io.on('connection', (socket) => {
       location: msgDoc.location,
       deleted: false,
       edited: false,
+      reactions: [],
       time: new Date(msgDoc.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
     });
   });
@@ -260,6 +261,7 @@ io.on('connection', (socket) => {
       location: msgDoc.location,
       deleted: false,
       edited: false,
+      reactions: [],
       time,
       read: false
     };
@@ -303,6 +305,34 @@ io.on('connection', (socket) => {
       await msg.save();
 
       broadcastToRoom(msg.room, 'messageDeleted', { messageId: String(msg._id), room: msg.room });
+    } catch (err) { /* ignore */ }
+  });
+
+  // ---------- REACT TO MESSAGE (emoji reaction — ek user, ek message pe ek hi reaction) ----------
+  socket.on('reactMessage', async ({ messageId, emoji }) => {
+    if (!socket.username || !messageId || !emoji) return;
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg || msg.deleted) return;
+
+      const existingIndex = msg.reactions.findIndex(r => r.username === socket.username);
+      if (existingIndex !== -1 && msg.reactions[existingIndex].emoji === emoji) {
+        // Same emoji dobara tap kiya -> reaction hatao (toggle off)
+        msg.reactions.splice(existingIndex, 1);
+      } else if (existingIndex !== -1) {
+        // Alag emoji choose kiya -> purana replace karo
+        msg.reactions[existingIndex].emoji = emoji;
+      } else {
+        // Naya reaction add karo
+        msg.reactions.push({ username: socket.username, emoji });
+      }
+      await msg.save();
+
+      broadcastToRoom(msg.room, 'messageReaction', {
+        messageId: String(msg._id),
+        room: msg.room,
+        reactions: msg.reactions
+      });
     } catch (err) { /* ignore */ }
   });
 

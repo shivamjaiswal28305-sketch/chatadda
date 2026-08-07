@@ -39,6 +39,15 @@ const avatarFileInput = document.getElementById('avatarFileInput');
 const headerAvatar = document.getElementById('headerAvatar');
 const headerSubtitle = document.getElementById('headerSubtitle');
 
+// ==================== TIME FORMATTING (hamesha CLIENT/PHONE ke local timezone me) ====================
+// Server ab raw createdAt (ISO timestamp) bhejta hai. Time ko yahan, render hote waqt,
+// browser/phone ke apne local timezone me format karte hain — isse time hamesha sahi dikhega,
+// chahe server kisi bhi timezone (UTC) me chal raha ho.
+function formatMsgTime(createdAt) {
+  if (!createdAt) return '';
+  return new Date(createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
 // ==================== WALLPAPER ====================
 function getWallpaperKey(chat) { return `chatadda_wallpaper_${chat}`; }
 
@@ -255,6 +264,8 @@ function formatLastSeen(dateStr) {
   return `${d.toLocaleDateString('en-IN')} ${time}`;
 }
 
+// WhatsApp-style: header ke subtitle line mein Online / Last seen / Typing... teeno
+// yahi ek jagah dikhte hain — isse "typing" wala text kabhi "Online" ke upar overlap nahi karta.
 function updateHeaderPresence() {
   if (!currentChat || currentChat === 'public') {
     headerSubtitle.textContent = '';
@@ -422,7 +433,7 @@ async function loadHistory(room) {
         _id: m._id, username: m.fromUsername, type: m.type, text: m.text,
         mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
         deleted: !!m.deleted, edited: !!m.edited, reactions: m.reactions || [],
-        time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+        createdAt: m.createdAt
       }));
       conversations.public._loaded = true;
       if (currentChat === 'public') renderMessages();
@@ -496,7 +507,7 @@ async function switchToChat(target) {
           _id: m._id, from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
           type: m.type, text: m.text, mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
           deleted: !!m.deleted, edited: !!m.edited, reactions: m.reactions || [],
-          time: new Date(m.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+          createdAt: m.createdAt,
           read: m.readBy && m.readBy.length > 0
         }));
         conversations[target]._loaded = true;
@@ -605,10 +616,11 @@ function appendMessageToDOM(data) {
     ? `<span class="msg-ticks${data.read ? ' read' : ''}">${data.read ? '✓✓' : (delivered ? '✓✓' : '✓')}</span>`
     : '';
 
+  // Time hamesha yahin, render hote waqt, phone ke local timezone se nikalte hain (createdAt se)
   div.innerHTML = `
     ${isMine ? '' : `<span class="msg-user">${escapeHtml(data.username || data.from)}</span>`}
     ${bodyHtml}
-    <span class="msg-time">${data.time}${ticksHtml}</span>
+    <span class="msg-time">${formatMsgTime(data.createdAt)}${ticksHtml}</span>
   `;
 
   if (!data.deleted) {
@@ -754,18 +766,31 @@ socket.on('messagesRead', ({ byUsername }) => {
   }
 });
 
+// ==================== TYPING INDICATOR (WhatsApp-style) ====================
+// Private chat mein "typing..." seedha header ke subtitle line mein dikhta hai
+// (jahan "Online" / "Last seen" dikhta hai) — isse kabhi overlap nahi hota,
+// kyunki ek waqt mein sirf ek hi text us line mein hota hai.
+// Adda Room (public) mein typing alag chhoti si line mein dikhta hai, jaise pehle tha.
 socket.on('typing', (username) => {
   if (currentChat !== 'public' || blockedUsers.has(username)) return;
-  showTyping(username);
+  showPublicTyping(username);
 });
 socket.on('privateTyping', (username) => {
   if (currentChat !== username || blockedUsers.has(username)) return;
-  showTyping(username);
+  showPrivateTyping();
 });
-function showTyping(username) {
+
+function showPublicTyping(username) {
   typingIndicator.textContent = `${username} likh raha/rahi hai...`;
   clearTimeout(typingIndicator._t);
   typingIndicator._t = setTimeout(() => { typingIndicator.textContent = ''; }, 1500);
+}
+
+function showPrivateTyping() {
+  headerSubtitle.textContent = 'typing...';
+  headerSubtitle.classList.add('online');
+  clearTimeout(headerSubtitle._t);
+  headerSubtitle._t = setTimeout(() => { updateHeaderPresence(); }, 1500);
 }
 
 socket.on('reportReceived', (reportedUsername) => {

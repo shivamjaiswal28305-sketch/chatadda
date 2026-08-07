@@ -38,6 +38,29 @@ const myAvatarBtn = document.getElementById('myAvatarBtn');
 const avatarFileInput = document.getElementById('avatarFileInput');
 const headerAvatar = document.getElementById('headerAvatar');
 const headerSubtitle = document.getElementById('headerSubtitle');
+const micBtn = document.getElementById('micBtn');
+const recordingBar = document.getElementById('recordingBar');
+const recordingTimer = document.getElementById('recordingTimer');
+const contactBtn = document.getElementById('contactBtn');
+const contactFormModal = document.getElementById('contactFormModal');
+const contactNameInput = document.getElementById('contactNameInput');
+const contactPhoneInput = document.getElementById('contactPhoneInput');
+const contactFormCancel = document.getElementById('contactFormCancel');
+const contactFormSend = document.getElementById('contactFormSend');
+
+const imageEditorOverlay = document.getElementById('imageEditorOverlay');
+const editorCanvasWrap = document.getElementById('editorCanvasWrap');
+const imageCanvas = document.getElementById('imageCanvas');
+const drawCanvas = document.getElementById('drawCanvas');
+const editorCancelBtn = document.getElementById('editorCancelBtn');
+const editorRotateBtn = document.getElementById('editorRotateBtn');
+const editorSendBtn = document.getElementById('editorSendBtn');
+const filterStrip = document.getElementById('filterStrip');
+const drawColorStrip = document.getElementById('drawColorStrip');
+const cropBox = document.getElementById('cropBox');
+const cropActions = document.getElementById('cropActions');
+const cropCancelBtn = document.getElementById('cropCancelBtn');
+const cropApplyBtn = document.getElementById('cropApplyBtn');
 
 // ==================== TIME FORMATTING (hamesha CLIENT/PHONE ke local timezone me) ====================
 // Server ab raw createdAt (ISO timestamp) bhejta hai. Time ko yahan, render hote waqt,
@@ -61,6 +84,7 @@ function applyWallpaper(chat) {
 }
 
 wallpaperBtn.addEventListener('click', () => {
+  themePicker.classList.add('hidden');
   wallpaperPicker.classList.toggle('hidden');
 });
 
@@ -72,6 +96,37 @@ wallpaperPicker.querySelectorAll('.wallpaper-opt').forEach((btn) => {
     wallpaperPicker.classList.add('hidden');
   });
 });
+
+// ==================== APP THEME (Telegram-style, poori app pe lagta hai) ====================
+const themeBtn = document.getElementById('themeBtn');
+const themePicker = document.getElementById('themePicker');
+const THEME_KEY = 'chatadda_app_theme';
+
+function applyAppTheme() {
+  const saved = localStorage.getItem(THEME_KEY) || 'default';
+  document.body.classList.remove('theme-telegram', 'theme-purple', 'theme-sunset', 'theme-ocean', 'theme-rose');
+  if (saved !== 'default') document.body.classList.add(`theme-${saved}`);
+  themePicker.querySelectorAll('.theme-opt').forEach((btn) => {
+    btn.classList.toggle('selected', btn.dataset.theme === saved);
+  });
+}
+
+themeBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  wallpaperPicker.classList.add('hidden');
+  themePicker.classList.toggle('hidden');
+});
+
+themePicker.querySelectorAll('.theme-opt').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    localStorage.setItem(THEME_KEY, btn.dataset.theme);
+    applyAppTheme();
+    themePicker.classList.add('hidden');
+  });
+});
+
+applyAppTheme();
 
 function getInitials(name) {
   if (!name) return '?';
@@ -252,16 +307,21 @@ avatarFileInput.addEventListener('change', async () => {
   avatarFileInput.value = '';
 });
 
+// WhatsApp-style exact wording:
+// "today at 10:57 AM", "yesterday at 5:37 PM", "on 7/15/2026" (purane dinon ke liye sirf date, time nahi)
 function formatLastSeen(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
   const now = new Date();
-  const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-  if (d.toDateString() === now.toDateString()) return `aaj ${time}`;
+  const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  if (d.toDateString() === now.toDateString()) return `today at ${time}`;
+
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return `kal ${time}`;
-  return `${d.toLocaleDateString('en-IN')} ${time}`;
+  if (d.toDateString() === yesterday.toDateString()) return `yesterday at ${time}`;
+
+  return `on ${d.toLocaleDateString('en-IN')}`;
 }
 
 // WhatsApp-style: header ke subtitle line mein Online / Last seen / Typing... teeno
@@ -274,10 +334,10 @@ function updateHeaderPresence() {
   }
   const p = presenceMap[currentChat];
   if (p && p.isOnline) {
-    headerSubtitle.textContent = 'Online';
+    headerSubtitle.textContent = 'online';
     headerSubtitle.classList.add('online');
   } else {
-    headerSubtitle.textContent = p && p.lastSeen ? `Last seen ${formatLastSeen(p.lastSeen)}` : '';
+    headerSubtitle.textContent = p && p.lastSeen ? `last seen ${formatLastSeen(p.lastSeen)}` : '';
     headerSubtitle.classList.remove('online');
   }
 }
@@ -607,6 +667,18 @@ function appendMessageToDOM(data) {
   } else if (data.type === 'location' && data.location) {
     const { lat, lng } = data.location;
     bodyHtml = `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" class="msg-location">📍 Location dekho</a>`;
+  } else if (data.type === 'audio') {
+    bodyHtml = `<div class="msg-audio"><audio controls src="${data.mediaUrl}"></audio></div>`;
+  } else if (data.type === 'contact') {
+    const phone = escapeHtml(data.contactPhone || '');
+    bodyHtml = `
+      <a href="tel:${phone}" class="msg-contact-card" style="color:inherit;text-decoration:none;">
+        <span class="msg-contact-icon">👤</span>
+        <span class="msg-contact-info">
+          <span class="msg-contact-name">${escapeHtml(data.contactName || 'Contact')}</span>
+          <span class="msg-contact-phone">${phone}</span>
+        </span>
+      </a>`;
   } else {
     bodyHtml = `<span class="msg-text">${escapeHtml(data.text)}</span>${data.edited ? '<span class="edited-tag">(edited)</span>' : ''}`;
   }
@@ -837,6 +909,13 @@ fileInput.addEventListener('change', async () => {
     return;
   }
 
+  // Images edit screen se hokar jaate hain (crop/rotate/filter/draw/text)
+  if (file.type.startsWith('image/')) {
+    openImageEditor(file);
+    fileInput.value = '';
+    return;
+  }
+
   const formData = new FormData();
   formData.append('file', file);
 
@@ -852,7 +931,339 @@ fileInput.addEventListener('change', async () => {
   fileInput.value = '';
 });
 
-// ==================== LOCATION SHARE ====================
+// ==================== IMAGE EDITOR (crop / rotate / filter / draw / text) ====================
+const EDITOR_FILTERS = {
+  none: 'none',
+  clarendon: 'contrast(1.2) saturate(1.35) brightness(1.05)',
+  juno: 'sepia(0.15) saturate(1.4) contrast(1.1) brightness(1.05)',
+  lark: 'brightness(1.1) saturate(1.1) contrast(0.95)',
+  gingham: 'brightness(1.05) sepia(0.1) contrast(0.9) saturate(0.85)',
+  moon: 'grayscale(1) contrast(1.1) brightness(1.05)'
+};
+
+let editorImage = null;   // current base Image() object
+let editorFilter = 'none';
+let editorTool = null;    // 'crop' | 'filter' | 'draw' | 'text' | null
+let editorDrawColor = '#ffffff';
+let isDrawing = false;
+let cropDragMode = null;  // 'move' | 'tl' | 'tr' | 'bl' | 'br' | null
+let cropStart = null;
+
+const imgCtx = imageCanvas.getContext('2d');
+const drawCtx = drawCanvas.getContext('2d');
+
+function openImageEditor(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      editorImage = img;
+      editorFilter = 'none';
+      setEditorTool(null);
+      filterStrip.querySelectorAll('.editor-filter-btn').forEach((b) => b.classList.toggle('active', b.dataset.filter === 'none'));
+      imageEditorOverlay.classList.remove('hidden');
+      setupEditorCanvasSize();
+      renderImageCanvas();
+      clearDrawCanvas();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function setupEditorCanvasSize() {
+  const maxW = editorCanvasWrap.clientWidth * 0.94;
+  const maxH = editorCanvasWrap.clientHeight * 0.94;
+  const ratio = Math.min(maxW / editorImage.width, maxH / editorImage.height, 1);
+  const w = Math.round(editorImage.width * ratio);
+  const h = Math.round(editorImage.height * ratio);
+  [imageCanvas, drawCanvas].forEach((c) => { c.width = w; c.height = h; });
+}
+
+function renderImageCanvas() {
+  imgCtx.clearRect(0, 0, imageCanvas.width, imageCanvas.height);
+  imgCtx.filter = EDITOR_FILTERS[editorFilter] || 'none';
+  imgCtx.drawImage(editorImage, 0, 0, imageCanvas.width, imageCanvas.height);
+  imgCtx.filter = 'none';
+}
+
+function clearDrawCanvas() {
+  drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+}
+
+// "Flatten" karta hai current image+draw ko ek nayi Image mein — rotate/crop ke baad
+// state consistent rahe isliye (naya editorImage banta hai, filter/draw reset ho jaate hain)
+function flattenComposite() {
+  const tmp = document.createElement('canvas');
+  tmp.width = imageCanvas.width;
+  tmp.height = imageCanvas.height;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(imageCanvas, 0, 0);
+  tctx.drawImage(drawCanvas, 0, 0);
+  return tmp;
+}
+
+function replaceEditorImageWithCanvas(canvas) {
+  const img = new Image();
+  img.onload = () => {
+    editorImage = img;
+    editorFilter = 'none';
+    filterStrip.querySelectorAll('.editor-filter-btn').forEach((b) => b.classList.toggle('active', b.dataset.filter === 'none'));
+    setupEditorCanvasSize();
+    renderImageCanvas();
+    clearDrawCanvas();
+  };
+  img.src = canvas.toDataURL('image/png');
+}
+
+// ---- Rotate 90° ----
+editorRotateBtn.addEventListener('click', () => {
+  const flattened = flattenComposite();
+  const rotated = document.createElement('canvas');
+  rotated.width = flattened.height;
+  rotated.height = flattened.width;
+  const rctx = rotated.getContext('2d');
+  rctx.translate(rotated.width / 2, rotated.height / 2);
+  rctx.rotate(Math.PI / 2);
+  rctx.drawImage(flattened, -flattened.width / 2, -flattened.height / 2);
+  replaceEditorImageWithCanvas(rotated);
+});
+
+// ---- Tool switching ----
+document.querySelectorAll('.editor-tool-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const tool = editorTool === btn.dataset.tool ? null : btn.dataset.tool;
+    setEditorTool(tool);
+  });
+});
+
+function setEditorTool(tool) {
+  editorTool = tool;
+  document.querySelectorAll('.editor-tool-btn').forEach((b) => b.classList.toggle('active', b.dataset.tool === tool));
+  filterStrip.classList.toggle('hidden', tool !== 'filter');
+  drawColorStrip.classList.toggle('hidden', tool !== 'draw' && tool !== 'text');
+  cropActions.classList.toggle('hidden', tool !== 'crop');
+  drawCanvas.style.pointerEvents = (tool === 'draw' || tool === 'text') ? 'auto' : 'none';
+  if (tool === 'crop') openCropBox(); else cropBox.classList.add('hidden');
+}
+
+// ---- Filters ----
+filterStrip.querySelectorAll('.editor-filter-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    editorFilter = btn.dataset.filter;
+    filterStrip.querySelectorAll('.editor-filter-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderImageCanvas();
+  });
+});
+
+// ---- Draw / text color ----
+drawColorStrip.querySelectorAll('.editor-color-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    editorDrawColor = btn.dataset.color;
+    drawColorStrip.querySelectorAll('.editor-color-btn').forEach((b) => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+
+// ---- Draw (freehand pen) ----
+function getCanvasPos(evt) {
+  const rect = drawCanvas.getBoundingClientRect();
+  const point = evt.touches ? evt.touches[0] : evt;
+  return {
+    x: (point.clientX - rect.left) * (drawCanvas.width / rect.width),
+    y: (point.clientY - rect.top) * (drawCanvas.height / rect.height)
+  };
+}
+
+function handleDrawStart(e) {
+  if (editorTool === 'text') { handleTextTap(e); return; }
+  if (editorTool !== 'draw') return;
+  e.preventDefault();
+  isDrawing = true;
+  const p = getCanvasPos(e);
+  drawCtx.beginPath();
+  drawCtx.moveTo(p.x, p.y);
+  drawCtx.lineCap = 'round';
+  drawCtx.lineJoin = 'round';
+  drawCtx.strokeStyle = editorDrawColor;
+  drawCtx.lineWidth = 5;
+}
+function handleDrawMove(e) {
+  if (!isDrawing || editorTool !== 'draw') return;
+  e.preventDefault();
+  const p = getCanvasPos(e);
+  drawCtx.lineTo(p.x, p.y);
+  drawCtx.stroke();
+}
+function handleDrawEnd() { isDrawing = false; }
+
+drawCanvas.addEventListener('mousedown', handleDrawStart);
+drawCanvas.addEventListener('mousemove', handleDrawMove);
+drawCanvas.addEventListener('mouseup', handleDrawEnd);
+drawCanvas.addEventListener('mouseleave', handleDrawEnd);
+drawCanvas.addEventListener('touchstart', handleDrawStart, { passive: false });
+drawCanvas.addEventListener('touchmove', handleDrawMove, { passive: false });
+drawCanvas.addEventListener('touchend', handleDrawEnd);
+
+// ---- Text tool: tap karo, chhota input box khulega, type karke Enter/blur pe draw ho jaata hai ----
+function handleTextTap(e) {
+  const rect = drawCanvas.getBoundingClientRect();
+  const point = e.touches ? e.touches[0] : e;
+  const screenX = point.clientX - rect.left;
+  const screenY = point.clientY - rect.top;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'editor-text-input';
+  input.style.left = `${screenX}px`;
+  input.style.top = `${screenY - 20}px`;
+  input.style.color = editorDrawColor;
+  editorCanvasWrap.appendChild(input);
+  input.focus();
+
+  function commitText() {
+    const value = input.value.trim();
+    if (value) {
+      const p = getCanvasPos({ clientX: point.clientX, clientY: point.clientY });
+      drawCtx.font = 'bold 26px Inter, sans-serif';
+      drawCtx.fillStyle = editorDrawColor;
+      drawCtx.textBaseline = 'top';
+      drawCtx.fillText(value, p.x, p.y - 13);
+    }
+    input.remove();
+  }
+  input.addEventListener('blur', commitText);
+  input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') input.blur(); });
+}
+
+// ---- Crop ----
+function openCropBox() {
+  const wrapRect = editorCanvasWrap.getBoundingClientRect();
+  const canvasRect = imageCanvas.getBoundingClientRect();
+  const left = canvasRect.left - wrapRect.left + canvasRect.width * 0.08;
+  const top = canvasRect.top - wrapRect.top + canvasRect.height * 0.08;
+  const w = canvasRect.width * 0.84;
+  const h = canvasRect.height * 0.84;
+  cropBox.style.left = `${left}px`;
+  cropBox.style.top = `${top}px`;
+  cropBox.style.width = `${w}px`;
+  cropBox.style.height = `${h}px`;
+  cropBox.classList.remove('hidden');
+}
+
+cropBox.addEventListener('mousedown', startCropDrag);
+cropBox.addEventListener('touchstart', startCropDrag, { passive: false });
+
+function startCropDrag(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const handle = e.target.closest('.crop-handle');
+  cropDragMode = handle ? [...handle.classList].find((c) => c !== 'crop-handle') : 'move';
+  const point = e.touches ? e.touches[0] : e;
+  cropStart = {
+    x: point.clientX, y: point.clientY,
+    left: cropBox.offsetLeft, top: cropBox.offsetTop,
+    width: cropBox.offsetWidth, height: cropBox.offsetHeight
+  };
+  document.addEventListener('mousemove', onCropDrag);
+  document.addEventListener('touchmove', onCropDrag, { passive: false });
+  document.addEventListener('mouseup', endCropDrag);
+  document.addEventListener('touchend', endCropDrag);
+}
+
+function onCropDrag(e) {
+  if (!cropDragMode) return;
+  e.preventDefault();
+  const point = e.touches ? e.touches[0] : e;
+  const dx = point.clientX - cropStart.x;
+  const dy = point.clientY - cropStart.y;
+  const wrapRect = editorCanvasWrap.getBoundingClientRect();
+
+  let { left, top, width, height } = cropStart;
+  if (cropDragMode === 'move') {
+    left += dx; top += dy;
+  } else if (cropDragMode === 'tl') {
+    left += dx; top += dy; width -= dx; height -= dy;
+  } else if (cropDragMode === 'tr') {
+    top += dy; width += dx; height -= dy;
+  } else if (cropDragMode === 'bl') {
+    left += dx; width -= dx; height += dy;
+  } else if (cropDragMode === 'br') {
+    width += dx; height += dy;
+  }
+  if (width < 40) width = 40;
+  if (height < 40) height = 40;
+  left = Math.max(0, Math.min(left, wrapRect.width - width));
+  top = Math.max(0, Math.min(top, wrapRect.height - height));
+
+  cropBox.style.left = `${left}px`;
+  cropBox.style.top = `${top}px`;
+  cropBox.style.width = `${width}px`;
+  cropBox.style.height = `${height}px`;
+}
+
+function endCropDrag() {
+  cropDragMode = null;
+  document.removeEventListener('mousemove', onCropDrag);
+  document.removeEventListener('touchmove', onCropDrag);
+  document.removeEventListener('mouseup', endCropDrag);
+  document.removeEventListener('touchend', endCropDrag);
+}
+
+cropCancelBtn.addEventListener('click', () => setEditorTool(null));
+
+cropApplyBtn.addEventListener('click', () => {
+  const canvasRect = imageCanvas.getBoundingClientRect();
+  const scaleX = imageCanvas.width / canvasRect.width;
+  const scaleY = imageCanvas.height / canvasRect.height;
+  const cropRect = cropBox.getBoundingClientRect();
+
+  const sx = Math.max(0, (cropRect.left - canvasRect.left) * scaleX);
+  const sy = Math.max(0, (cropRect.top - canvasRect.top) * scaleY);
+  const sw = Math.min(imageCanvas.width - sx, cropRect.width * scaleX);
+  const sh = Math.min(imageCanvas.height - sy, cropRect.height * scaleY);
+
+  const flattened = flattenComposite();
+  const cropped = document.createElement('canvas');
+  cropped.width = sw;
+  cropped.height = sh;
+  cropped.getContext('2d').drawImage(flattened, sx, sy, sw, sh, 0, 0, sw, sh);
+
+  replaceEditorImageWithCanvas(cropped);
+  setEditorTool(null);
+});
+
+// ---- Cancel / Send ----
+editorCancelBtn.addEventListener('click', () => {
+  imageEditorOverlay.classList.add('hidden');
+  editorImage = null;
+  setEditorTool(null);
+});
+
+editorSendBtn.addEventListener('click', async () => {
+  if (!editorImage || !currentChat) return;
+  const finalCanvas = flattenComposite();
+  imageEditorOverlay.classList.add('hidden');
+
+  finalCanvas.toBlob(async (blob) => {
+    const formData = new FormData();
+    formData.append('file', blob, `photo-${Date.now()}.png`);
+    showToast('Photo bhej rahe hain...');
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || 'Upload fail hua'); return; }
+      sendMessage({ type: 'image', mediaUrl: data.url, mediaName: data.name });
+    } catch (err) {
+      showToast('Upload fail hua');
+    }
+    editorImage = null;
+    setEditorTool(null);
+  }, 'image/png');
+});
+
+
 locationBtn.addEventListener('click', () => {
   if (!navigator.geolocation) { showToast('Location is browser me support nahi hai'); return; }
   showToast('Location le rahe hain...');
@@ -863,6 +1274,121 @@ locationBtn.addEventListener('click', () => {
     () => showToast('Location permission nahi mili'),
     { enableHighAccuracy: true, timeout: 10000 }
   );
+});
+
+// ==================== VOICE MESSAGE (press-and-hold mic, WhatsApp-style) ====================
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingStartTime = 0;
+let recordingTimerInterval = null;
+let recordingCancelled = false;
+
+function formatRecordingTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+async function startRecording() {
+  if (!currentChat || mediaRecorder) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('Recording is browser me support nahi hai');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recordedChunks = [];
+    recordingCancelled = false;
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const duration = Math.round((Date.now() - recordingStartTime) / 1000);
+      if (!recordingCancelled && recordedChunks.length && duration >= 1) {
+        uploadAndSendVoice(new Blob(recordedChunks, { type: 'audio/webm' }), duration);
+      }
+      mediaRecorder = null;
+    };
+    mediaRecorder.start();
+    recordingStartTime = Date.now();
+    micBtn.classList.add('recording');
+    recordingBar.classList.remove('hidden');
+    recordingTimer.textContent = '0:00';
+    recordingTimerInterval = setInterval(() => {
+      recordingTimer.textContent = formatRecordingTime(Math.round((Date.now() - recordingStartTime) / 1000));
+    }, 500);
+  } catch (err) {
+    showToast('Mic access nahi mila. Permission check karo.');
+  }
+}
+
+function stopRecording(cancelled = false) {
+  recordingCancelled = cancelled;
+  micBtn.classList.remove('recording');
+  recordingBar.classList.add('hidden');
+  clearInterval(recordingTimerInterval);
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+}
+
+async function uploadAndSendVoice(blob, duration) {
+  const formData = new FormData();
+  formData.append('file', blob, `voice-${Date.now()}.webm`);
+  showToast('Voice message bhej rahe hain...');
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || 'Voice message bhejna fail hua'); return; }
+    sendMessage({ type: 'audio', mediaUrl: data.url, mediaName: 'Voice message', duration });
+  } catch (err) {
+    showToast('Voice message bhejna fail hua');
+  }
+}
+
+// Press-and-hold: mouse (desktop) + touch (mobile)
+micBtn.addEventListener('mousedown', (e) => { e.preventDefault(); startRecording(); });
+micBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); }, { passive: false });
+micBtn.addEventListener('mouseup', () => stopRecording(false));
+micBtn.addEventListener('mouseleave', () => { if (mediaRecorder) stopRecording(false); });
+micBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(false); });
+micBtn.addEventListener('touchcancel', () => stopRecording(true));
+
+// ==================== CONTACT SHARE (WhatsApp-style) ====================
+contactBtn.addEventListener('click', async () => {
+  if (!currentChat) return;
+  // Contact Picker API — Android Chrome mein kaam karta hai
+  if ('contacts' in navigator && 'ContactsManager' in window) {
+    try {
+      const props = ['name', 'tel'];
+      const opts = { multiple: false };
+      const contacts = await navigator.contacts.select(props, opts);
+      if (contacts.length) {
+        const c = contacts[0];
+        const name = (c.name && c.name[0]) || 'Contact';
+        const phone = (c.tel && c.tel[0]) || '';
+        sendMessage({ type: 'contact', contactName: name, contactPhone: phone });
+        return;
+      }
+    } catch (err) {
+      // User ne cancel kiya ya permission nahi di — manual form dikhao
+    }
+  }
+  // Fallback: manual naam+number form (iPhone / desktop ke liye)
+  contactNameInput.value = '';
+  contactPhoneInput.value = '';
+  contactFormModal.classList.remove('hidden');
+  contactNameInput.focus();
+});
+
+contactFormCancel.addEventListener('click', () => {
+  contactFormModal.classList.add('hidden');
+});
+
+contactFormSend.addEventListener('click', () => {
+  const name = contactNameInput.value.trim();
+  const phone = contactPhoneInput.value.trim();
+  if (!name || !phone) { showToast('Naam aur number dono bharo'); return; }
+  sendMessage({ type: 'contact', contactName: name, contactPhone: phone });
+  contactFormModal.classList.add('hidden');
 });
 
 // ==================== BLOCK / REPORT ====================
@@ -884,6 +1410,29 @@ reportBtn.addEventListener('click', () => {
   const reason = window.prompt(`${currentChat} ko report karne ki wajah likho (optional):`, '');
   if (reason === null) return;
   socket.emit('reportUser', { reportedUsername: currentChat, reason });
+});
+
+// ==================== HEADER MORE-OPTIONS DROPDOWN (WhatsApp-style) ====================
+const moreOptionsBtn = document.getElementById('moreOptionsBtn');
+const moreOptionsMenu = document.getElementById('moreOptionsMenu');
+
+moreOptionsBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  moreOptionsMenu.classList.toggle('hidden');
+});
+
+document.addEventListener('click', () => {
+  moreOptionsMenu.classList.add('hidden');
+});
+
+['wallpaperBtn', 'themeBtn', 'blockBtn', 'reportBtn'].forEach((id) => {
+  document.getElementById(id).addEventListener('click', () => {
+    moreOptionsMenu.classList.add('hidden');
+  });
+});
+
+document.addEventListener('click', () => {
+  themePicker.classList.add('hidden');
 });
 
 menuBtn.addEventListener('click', () => {
@@ -1273,13 +1822,25 @@ toggleCamBtn.addEventListener('click', () => {
 
 updateCallButtonsVisibility();
 
-// FIX: keyboard band hone ke baad kabhi kabhi page scroll position gadbad reh jaati hai
-// (kuch Android phones par), jisse header viewport se bahar chala jaata hai.
-// Visual viewport resize hone par (jaise keyboard band hote waqt) scroll reset kar do.
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-  });
+// FIX: mobile browsers (khaaskar Android) mein 100dvh keyboard khulne/band hone par
+// sahi se recalculate nahi hota, jisse header kabhi-kabhi viewport se bahar chala jaata hai
+// ya poora layout gadbad dikhta hai. Yahan hum real visualViewport height nikal ke
+// ek CSS variable (--app-height) mein set karte hain, jise style.css mein screen/body
+// ki height ke liye use kiya gaya hai — ye 100dvh se zyada reliable hai.
+function setAppHeight() {
+  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', `${h}px`);
+  window.scrollTo(0, 0);
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
 }
+setAppHeight();
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('orientationchange', setAppHeight);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', setAppHeight);
+  window.visualViewport.addEventListener('scroll', setAppHeight);
+}
+// Input pe focus/blur hone par (keyboard khulna/band hona) bhi turant recalculate karo
+messageInput.addEventListener('focus', () => setTimeout(setAppHeight, 100));
+messageInput.addEventListener('blur', () => setTimeout(setAppHeight, 100));

@@ -1,20 +1,36 @@
+/* ==================== THEME VARIABLES (Telegram-style theme switcher) ==================== */
+:root {
+  --accent: #25D366;
+  --accent-dark: #128C7E;
+  --mine-bubble: #d9fdd3;
+  /* FIX: 100dvh kai Android phones/webviews pe keyboard khulne-band hone par sahi
+     recalculate nahi hota, jisse header viewport se bahar chala jaata hai.
+     JS isko real visualViewport height se update karta hai — zyada reliable hai. */
+  --app-height: 100dvh;
+}
+body.theme-telegram { --accent: #2AABEE; --accent-dark: #1a8cd8; --mine-bubble: #e3f2fd; }
+body.theme-purple   { --accent: #7C3AED; --accent-dark: #5b21b6; --mine-bubble: #ede9fe; }
+body.theme-sunset    { --accent: #F97316; --accent-dark: #c2410c; --mine-bubble: #ffe8d6; }
+body.theme-ocean     { --accent: #0EA5A4; --accent-dark: #0b7a79; --mine-bubble: #ccfbf1; }
+body.theme-rose       { --accent: #FB7185; --accent-dark: #e11d48; --mine-bubble: #ffe4e6; }
+
 /* ==================== BASE / RESET ==================== */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   font-family: 'Inter', -apple-system, sans-serif;
   background: #f0f2f5;
   color: #111b21;
-  height: 100dvh;
+  height: var(--app-height);
   overflow: hidden;
   position: fixed;
   width: 100%;
 }
 .hidden { display: none !important; }
-.screen { width: 100%; height: 100dvh; }
+.screen { width: 100%; height: var(--app-height); }
 
 /* ==================== JOIN / LOGIN SCREEN ==================== */
 .join-screen {
-  background: linear-gradient(160deg, #075E54, #128C7E);
+  background: linear-gradient(160deg, #075E54, var(--accent-dark));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -38,7 +54,7 @@ body {
   margin: 16px 0 6px;
   color: #111b21;
 }
-.join-card h1 span { color: #25D366; }
+.join-card h1 span { color: var(--accent); }
 .join-card .tagline {
   color: #667781;
   font-size: 14px;
@@ -56,7 +72,7 @@ body {
 /* ==================== CHAT SCREEN LAYOUT ==================== */
 .chat-screen {
   display: flex;
-  height: 100dvh;
+  height: var(--app-height);
   background: #fff;
 }
 
@@ -100,7 +116,7 @@ body {
 .room-item:hover, .room-item.active { background: #e7f8f0; }
 .room-icon {
   width: 32px; height: 32px; border-radius: 50%;
-  background: #25D366; color: #fff;
+  background: var(--accent); color: #fff;
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; flex-shrink: 0;
 }
@@ -114,7 +130,7 @@ body {
 }
 .pulse {
   width: 8px; height: 8px; border-radius: 50%;
-  background: #25D366;
+  background: var(--accent);
   animation: pulseDot 1.5s infinite;
 }
 @keyframes pulseDot {
@@ -134,7 +150,7 @@ body {
 .user-list li:hover, .user-list li.active-chat { background: #f0f2f5; }
 .online-dot {
   width: 10px; height: 10px; border-radius: 50%;
-  background: #25D366; flex-shrink: 0;
+  background: var(--accent); flex-shrink: 0;
 }
 .uname { flex: 1; }
 .block-tag {
@@ -172,7 +188,7 @@ body {
    chhota, right-aligned rakha gaya hai taaki text wrap na ho. */
 .typing-indicator {
   font-size: 12px;
-  color: #25D366;
+  color: var(--accent);
   font-style: italic;
   max-width: 130px;
   white-space: nowrap;
@@ -180,7 +196,7 @@ body {
   text-overflow: ellipsis;
   flex-shrink: 0;
 }
-.chat-actions { display: flex; gap: 4px; }
+.chat-actions { display: flex; gap: 2px; align-items: center; }
 .action-btn {
   background: none; border: none; font-size: 18px; cursor: pointer;
   padding: 6px 8px; border-radius: 50%;
@@ -209,7 +225,7 @@ body {
   word-wrap: break-word;
 }
 .msg.mine {
-  background: #d9fdd3;
+  background: var(--mine-bubble);
   align-self: flex-end;
 }
 .msg.system {
@@ -226,7 +242,7 @@ body {
   display: block;
   font-size: 12px;
   font-weight: 700;
-  color: #25D366;
+  color: var(--accent);
   margin-bottom: 2px;
 }
 .msg-text { font-size: 14.5px; white-space: pre-wrap; }
@@ -257,7 +273,7 @@ body {
 }
 .message-form button[type="submit"] {
   width: 42px; height: 42px; border-radius: 50%;
-  border: none; background: #25D366; color: #fff;
+  border: none; background: var(--accent); color: #fff;
   font-size: 18px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
@@ -307,7 +323,7 @@ body {
   flex: 1; padding: 10px; border: none; border-radius: 8px;
   background: #eee; cursor: pointer; font-weight: 600; font-size: 14px;
 }
-.auth-tab.active { background: #25D366; color: #fff; }
+.auth-tab.active { background: var(--accent); color: #fff; }
 
 .auth-form { display: flex; flex-direction: column; gap: 10px; }
 .auth-form.hidden { display: none; }
@@ -315,7 +331,7 @@ body {
   padding: 12px; border-radius: 8px; border: 1px solid #ddd; font-size: 15px;
 }
 .auth-form button[type="submit"] {
-  padding: 12px; border: none; border-radius: 8px; background: #25D366;
+  padding: 12px; border: none; border-radius: 8px; background: var(--accent);
   color: #fff; font-weight: 700; cursor: pointer; font-size: 15px;
 }
 .auth-error {
@@ -334,6 +350,14 @@ body {
   padding: 6px 8px; flex-shrink: 0;
 }
 
+/* FIX: ab message bar mein 5 icons + input hai (attach, location, contact, mic, send) —
+   narrow phones (320-360px) pe icons compress na ho, sirf text input hi simat jaaye. */
+@media (max-width: 380px) {
+  .attach-btn { font-size: 18px; padding: 6px 5px; }
+  .message-form { gap: 3px; padding: 8px 8px; }
+  .message-form input[type="text"] { padding: 10px 12px; }
+}
+
 .msg-image { max-width: 220px; border-radius: 10px; display: block; margin-top: 4px; }
 .msg-doc, .msg-location {
   display: inline-block; margin-top: 4px; padding: 8px 12px;
@@ -343,7 +367,7 @@ body {
 /* ==================== WHATSAPP-STYLE CALL UI ==================== */
 .call-modal {
   position: fixed; inset: 0; z-index: 999;
-  background: linear-gradient(160deg, #075E54, #128C7E 60%, #1a3a3a);
+  background: linear-gradient(160deg, #075E54, var(--accent-dark) 60%, #1a3a3a);
   display: flex; align-items: center; justify-content: center;
 }
 .call-modal.hidden { display: none; }
@@ -383,7 +407,7 @@ body {
   font-size: 26px; cursor: pointer; display: flex; align-items: center; justify-content: center;
   box-shadow: 0 4px 14px rgba(0,0,0,0.3);
 }
-.call-round-btn.accept { background: #25D366; color: #fff; transform: rotate(0deg); }
+.call-round-btn.accept { background: var(--accent); color: #fff; transform: rotate(0deg); }
 .call-round-btn.reject { background: #FF3B30; color: #fff; transform: rotate(135deg); }
 .call-modal-labels { display: flex; gap: 46px; font-size: 13px; opacity: 0.85; }
 
@@ -458,7 +482,7 @@ body {
 .wallpaper-opt {
   width: 100%; aspect-ratio: 1; border-radius: 8px; border: 2px solid #ddd; cursor: pointer;
 }
-.wallpaper-opt.selected { border-color: #25D366; border-width: 3px; }
+.wallpaper-opt.selected { border-color: var(--accent); border-width: 3px; }
 
 .messages.wallpaper-teal { background: linear-gradient(135deg,#0f766e,#134e4a); }
 .messages.wallpaper-purple { background: linear-gradient(135deg,#7c3aed,#4c1d95); }
@@ -500,12 +524,12 @@ body {
   font-size: 14px;
   outline: none;
 }
-.search-box input:focus { border-color: #25D366; }
+.search-box input:focus { border-color: var(--accent); }
 .search-box button {
   width: 38px;
   border: none;
   border-radius: 8px;
-  background: #25D366;
+  background: var(--accent);
   color: #fff;
   font-size: 15px;
   cursor: pointer;
@@ -528,7 +552,7 @@ body {
   cursor: pointer;
   text-align: left;
 }
-.search-found-btn:hover { background: #d9fdd3; }
+.search-found-btn:hover { background: var(--mine-bubble); }
 
 /* ==================== READ RECEIPT TICKS ==================== */
 .msg-ticks {
@@ -537,7 +561,7 @@ body {
   color: #8696a0;
   letter-spacing: -2px;
 }
-.msg-ticks.read { color: #25D366; }
+.msg-ticks.read { color: var(--accent); }
 
 /* ==================== DARK MODE ==================== */
 body.dark-mode {
@@ -658,7 +682,7 @@ body.dark-mode .edited-tag { color: #8696a0; }
   object-fit: cover; flex-shrink: 0;
 }
 .mini-avatar-initial {
-  background: #25D366; color: #fff;
+  background: var(--accent); color: #fff;
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 14px;
 }
@@ -683,7 +707,7 @@ body.dark-mode .edited-tag { color: #8696a0; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.header-subtitle.online { color: #25D366; font-weight: 600; }
+.header-subtitle.online { color: var(--accent); font-weight: 600; }
 
 .my-profile-row {
   display: flex; align-items: center; gap: 10px;
@@ -692,7 +716,7 @@ body.dark-mode .edited-tag { color: #8696a0; }
 }
 .my-avatar-btn {
   width: 46px; height: 46px; border-radius: 50%;
-  border: none; background: #25D366; color: #fff;
+  border: none; background: var(--accent); color: #fff;
   font-weight: 700; font-size: 16px; cursor: pointer;
   overflow: hidden; padding: 0; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -747,8 +771,8 @@ body.dark-mode .edited-tag { color: #8696a0; }
 }
 .reaction-pill:hover { background: #f0f2f5; }
 .reaction-pill.mine-reaction {
-  background: #d9fdd3;
-  border-color: #25D366;
+  background: var(--mine-bubble);
+  border-color: var(--accent);
 }
 
 body.dark-mode .reaction-picker {
@@ -764,5 +788,276 @@ body.dark-mode .reaction-pill {
 body.dark-mode .reaction-pill:hover { background: #344048; }
 body.dark-mode .reaction-pill.mine-reaction {
   background: #025c4c;
-  border-color: #25D366;
+  border-color: var(--accent);
+}
+
+/* ==================== HEADER MORE OPTIONS MENU (WhatsApp-style) ==================== */
+.more-menu-wrap { position: relative; }
+.more-options-menu {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+  min-width: 180px;
+  z-index: 40;
+  overflow: hidden;
+}
+.more-options-menu.hidden { display: none; }
+.more-option-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 14px;
+  cursor: pointer;
+  color: #111b21;
+}
+.more-option-item:hover { background: #f0f2f5; }
+body.dark-mode .more-options-menu { background: #233138; }
+body.dark-mode .more-option-item { color: #e9edef; }
+body.dark-mode .more-option-item:hover { background: #182229; }
+
+/* ==================== THEME PICKER (Telegram-style) ==================== */
+.theme-picker {
+  position: absolute; top: 56px; right: 12px; z-index: 20;
+  background: #fff; border-radius: 12px; padding: 14px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.2); width: 220px;
+}
+.theme-picker.hidden { display: none; }
+.theme-picker p { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+.theme-options { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.theme-opt {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px; border-radius: 8px; border: 2px solid #eee;
+  background: #fafafa; cursor: pointer; font-size: 12.5px; font-weight: 600;
+  color: #111b21;
+}
+.theme-opt.selected { border-color: var(--accent); background: #f3fbf6; }
+.theme-swatch {
+  width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+}
+body.dark-mode .theme-picker { background: #202c33; color: #e9edef; }
+body.dark-mode .theme-opt { background: #2a3942; border-color: #2a3942; color: #e9edef; }
+body.dark-mode .theme-opt.selected { border-color: var(--accent); background: #1c3a33; }
+
+/* ==================== VOICE MESSAGE (mic + recording bar + audio bubble) ==================== */
+.mic-btn { font-size: 20px; touch-action: none; user-select: none; }
+.mic-btn.recording {
+  background: #ffdede;
+  color: #d33;
+  border-radius: 50%;
+  transform: scale(1.15);
+}
+
+.recording-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: #f0f2f5;
+  border-top: 1px solid #e9edef;
+  font-size: 13px;
+  color: #667781;
+}
+.recording-bar.hidden { display: none; }
+.recording-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #d33;
+  animation: pulseDot 1s infinite;
+  flex-shrink: 0;
+}
+#recordingTimer { font-weight: 700; color: #111b21; }
+.recording-hint { margin-left: auto; font-size: 11px; opacity: 0.75; }
+body.dark-mode .recording-bar { background: #202c33; border-top-color: #222d34; color: #8696a0; }
+body.dark-mode #recordingTimer { color: #e9edef; }
+
+.msg-audio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.msg-audio audio {
+  max-width: 220px;
+  height: 38px;
+}
+
+/* ==================== CONTACT SHARE ==================== */
+.contact-form-modal {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.4);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.contact-form-modal.hidden { display: none; }
+.contact-form-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 20px;
+  width: 100%;
+  max-width: 320px;
+}
+.contact-form-card p { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.contact-form-card input {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  margin-bottom: 10px;
+  outline: none;
+}
+.contact-form-card input:focus { border-color: var(--accent); }
+.contact-form-actions { display: flex; gap: 8px; margin-top: 6px; }
+.contact-form-actions button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+#contactFormCancel { background: #eee; color: #333; }
+#contactFormSend { background: var(--accent); color: #fff; }
+body.dark-mode .contact-form-card { background: #202c33; color: #e9edef; }
+body.dark-mode .contact-form-card input {
+  background: #2a3942; color: #e9edef; border-color: #2a3942;
+}
+body.dark-mode #contactFormCancel { background: #2a3942; color: #e9edef; }
+
+.msg-contact-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  min-width: 180px;
+}
+.msg-contact-icon {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.msg-contact-info { display: flex; flex-direction: column; }
+.msg-contact-name { font-weight: 600; font-size: 14px; }
+.msg-contact-phone { font-size: 12px; color: #667781; }
+body.dark-mode .msg-contact-phone { color: #8696a0; }
+
+/* ==================== IMAGE EDITOR (photo bhejne se pehle edit) ==================== */
+.image-editor-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: #000;
+  display: flex; flex-direction: column;
+}
+.image-editor-overlay.hidden { display: none; }
+
+.editor-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px;
+  flex-shrink: 0;
+}
+.editor-icon-btn {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: rgba(255,255,255,0.15); border: none; color: #fff;
+  font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.editor-send-btn {
+  width: 46px; height: 46px; border-radius: 50%;
+  background: var(--accent); border: none; color: #fff;
+  font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.editor-canvas-wrap {
+  flex: 1;
+  position: relative;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  touch-action: none;
+}
+#imageCanvas, #drawCanvas {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 100%; max-height: 100%;
+}
+#drawCanvas { touch-action: none; }
+
+.crop-box {
+  position: absolute;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,0.5);
+  touch-action: none;
+}
+.crop-box.hidden { display: none; }
+.crop-handle {
+  position: absolute;
+  width: 20px; height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+}
+.crop-handle.tl { top: -10px; left: -10px; cursor: nwse-resize; }
+.crop-handle.tr { top: -10px; right: -10px; cursor: nesw-resize; }
+.crop-handle.bl { bottom: -10px; left: -10px; cursor: nesw-resize; }
+.crop-handle.br { bottom: -10px; right: -10px; cursor: nwse-resize; }
+
+.editor-filter-strip, .editor-color-strip {
+  display: flex; gap: 10px; overflow-x: auto;
+  padding: 10px 16px; flex-shrink: 0;
+}
+.editor-filter-strip.hidden, .editor-color-strip.hidden { display: none; }
+.editor-filter-btn {
+  flex-shrink: 0; padding: 8px 16px; border-radius: 20px; border: none;
+  background: rgba(255,255,255,0.15); color: #fff; font-size: 12.5px; cursor: pointer;
+}
+.editor-filter-btn.active { background: #fff; color: #075E54; font-weight: 700; }
+.editor-color-btn {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  border: 3px solid rgba(255,255,255,0.3); cursor: pointer;
+}
+.editor-color-btn.active { border-color: #fff; transform: scale(1.15); }
+
+.editor-crop-actions {
+  display: flex; justify-content: space-between;
+  padding: 10px 16px; flex-shrink: 0;
+}
+.editor-crop-actions.hidden { display: none; }
+.editor-crop-actions button {
+  padding: 10px 22px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+#cropCancelBtn { background: rgba(255,255,255,0.15); color: #fff; }
+#cropApplyBtn { background: var(--accent); color: #fff; }
+
+.editor-bottom-toolbar {
+  display: flex; justify-content: space-around;
+  padding: 12px 16px 24px; flex-shrink: 0;
+}
+.editor-tool-btn {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: rgba(255,255,255,0.1); border: none; color: #fff;
+  font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.editor-tool-btn.active { background: var(--accent); }
+
+.editor-text-input {
+  position: absolute;
+  background: transparent;
+  border: 1px dashed rgba(255,255,255,0.7);
+  outline: none;
+  font-size: 26px;
+  font-weight: 700;
+  padding: 4px 8px;
+  min-width: 40px;
+  z-index: 10;
 }

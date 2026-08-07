@@ -112,6 +112,9 @@ function cleanMessage(msg) {
   return clean;
 }
 
+// Sab message types jo abhi support hote hain (voice message aur contact share sahit)
+const ALLOWED_MSG_TYPES = ['text', 'image', 'document', 'location', 'audio', 'contact'];
+
 function findSocketIdByUsername(username) {
   return Object.keys(onlineUsers).find(id => onlineUsers[id].username === username);
 }
@@ -195,10 +198,10 @@ io.on('connection', (socket) => {
     io.emit('userList', publicRoomUsernames());
   });
 
-  // ---------- PUBLIC MESSAGE (text/image/document/location) ----------
+  // ---------- PUBLIC MESSAGE (text/image/document/location/audio/contact) ----------
   socket.on('chatMessage', async (data) => {
     if (!socket.username) return;
-    const type = ['text', 'image', 'document', 'location'].includes(data.type) ? data.type : 'text';
+    const type = ALLOWED_MSG_TYPES.includes(data.type) ? data.type : 'text';
     const text = type === 'text' ? cleanMessage(String(data.text || '').slice(0, 500)) : '';
 
     const msgDoc = await Message.create({
@@ -209,7 +212,10 @@ io.on('connection', (socket) => {
       text,
       mediaUrl: data.mediaUrl || '',
       mediaName: data.mediaName || '',
-      location: data.location || undefined
+      mediaDuration: type === 'audio' ? Number(data.duration || 0) : 0,
+      location: data.location || undefined,
+      contactName: type === 'contact' ? String(data.contactName || '').slice(0, 60) : '',
+      contactPhone: type === 'contact' ? String(data.contactPhone || '').slice(0, 20) : ''
     });
 
     io.emit('chatMessage', {
@@ -219,7 +225,10 @@ io.on('connection', (socket) => {
       text,
       mediaUrl: msgDoc.mediaUrl,
       mediaName: msgDoc.mediaName,
+      duration: msgDoc.mediaDuration,
       location: msgDoc.location,
+      contactName: msgDoc.contactName,
+      contactPhone: msgDoc.contactPhone,
       deleted: false,
       edited: false,
       reactions: [],
@@ -228,12 +237,12 @@ io.on('connection', (socket) => {
   });
 
   // ---------- PRIVATE MESSAGE ----------
-  socket.on('privateMessage', async ({ toUsername, text, type, mediaUrl, mediaName, location }) => {
+  socket.on('privateMessage', async ({ toUsername, text, type, mediaUrl, mediaName, duration, location, contactName, contactPhone }) => {
     if (!socket.username || !toUsername) return;
     const targetUser = await User.findOne({ username: toUsername });
     if (!targetUser) return;
 
-    const msgType = ['text', 'image', 'document', 'location'].includes(type) ? type : 'text';
+    const msgType = ALLOWED_MSG_TYPES.includes(type) ? type : 'text';
     const cleanText = msgType === 'text' ? cleanMessage(String(text || '').slice(0, 500)) : '';
     const room = privateRoomId(socket.username, toUsername);
 
@@ -246,7 +255,10 @@ io.on('connection', (socket) => {
       text: cleanText,
       mediaUrl: mediaUrl || '',
       mediaName: mediaName || '',
-      location: location || undefined
+      mediaDuration: msgType === 'audio' ? Number(duration || 0) : 0,
+      location: location || undefined,
+      contactName: msgType === 'contact' ? String(contactName || '').slice(0, 60) : '',
+      contactPhone: msgType === 'contact' ? String(contactPhone || '').slice(0, 20) : ''
     });
 
     const payload = {
@@ -257,7 +269,10 @@ io.on('connection', (socket) => {
       text: cleanText,
       mediaUrl: msgDoc.mediaUrl,
       mediaName: msgDoc.mediaName,
+      duration: msgDoc.mediaDuration,
       location: msgDoc.location,
+      contactName: msgDoc.contactName,
+      contactPhone: msgDoc.contactPhone,
       deleted: false,
       edited: false,
       reactions: [],
@@ -300,7 +315,10 @@ io.on('connection', (socket) => {
       msg.text = '';
       msg.mediaUrl = '';
       msg.mediaName = '';
+      msg.mediaDuration = 0;
       msg.location = undefined;
+      msg.contactName = '';
+      msg.contactPhone = '';
       await msg.save();
 
       broadcastToRoom(msg.room, 'messageDeleted', { messageId: String(msg._id), room: msg.room });

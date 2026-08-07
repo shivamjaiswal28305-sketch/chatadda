@@ -48,6 +48,10 @@ const contactBtn = document.getElementById('contactBtn');
 const contactFormModal = document.getElementById('contactFormModal');
 const contactNameInput = document.getElementById('contactNameInput');
 const contactPhoneInput = document.getElementById('contactPhoneInput');
+const replyPreviewBar = document.getElementById('replyPreviewBar');
+const replyPreviewLabel = document.getElementById('replyPreviewLabel');
+const replyPreviewText = document.getElementById('replyPreviewText');
+const cancelReplyBtn = document.getElementById('cancelReplyBtn');
 const contactFormCancel = document.getElementById('contactFormCancel');
 const contactFormSend = document.getElementById('contactFormSend');
 
@@ -363,6 +367,7 @@ let currentChat = null; // null = koi chat select nahi hui abhi
 let onlineUsernames = []; // sirf Adda Room ke andar wale log
 const conversations = { public: [] };
 let blockedUsers = new Set(JSON.parse(localStorage.getItem('chatadda_blocked') || '[]'));
+let replyingTo = null; // { messageId, fromUsername, type, text } — jis message ka reply likha ja raha hai
 
 function saveBlocked() {
   localStorage.setItem('chatadda_blocked', JSON.stringify([...blockedUsers]));
@@ -496,6 +501,7 @@ async function loadHistory(room) {
         _id: m._id, username: m.fromUsername, type: m.type, text: m.text,
         mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
         deleted: !!m.deleted, edited: !!m.edited, reactions: m.reactions || [],
+        replyTo: m.replyTo || null,
         createdAt: m.createdAt
       }));
       conversations.public._loaded = true;
@@ -528,6 +534,9 @@ function renderUserList() {
 }
 
 async function switchToChat(target) {
+  // Chat badalte waqt purana reply-in-progress clear kar do, warna galat chat me reply chala jaayega
+  cancelReply();
+
   // Adda Room se bahar jaate waqt presence hata do
   if (currentChat === 'public' && target !== 'public') {
     socket.emit('leavePublicRoom');
@@ -570,6 +579,7 @@ async function switchToChat(target) {
           _id: m._id, from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
           type: m.type, text: m.text, mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
           deleted: !!m.deleted, edited: !!m.edited, reactions: m.reactions || [],
+          replyTo: m.replyTo || null,
           createdAt: m.createdAt,
           read: m.readBy && m.readBy.length > 0
         }));
@@ -694,6 +704,7 @@ function appendMessageToDOM(data) {
   // Time hamesha yahin, render hote waqt, phone ke local timezone se nikalte hain (createdAt se)
   div.innerHTML = `
     ${isMine ? '' : `<span class="msg-user">${escapeHtml(data.username || data.from)}</span>`}
+    ${!data.deleted ? buildReplyQuoteHtml(data.replyTo) : ''}
     ${bodyHtml}
     <span class="msg-time">${formatMsgTime(data.createdAt)}${ticksHtml}</span>
   `;
@@ -701,6 +712,12 @@ function appendMessageToDOM(data) {
   if (!data.deleted) {
     const actions = document.createElement('div');
     actions.className = 'msg-actions';
+
+    const replyActionBtn = document.createElement('button');
+    replyActionBtn.title = 'Reply';
+    replyActionBtn.textContent = '↩️';
+    replyActionBtn.addEventListener('click', () => startReply(data));
+    actions.appendChild(replyActionBtn);
 
     const reactBtn = document.createElement('button');
     reactBtn.title = 'React';
@@ -795,6 +812,48 @@ function buildReactionsRow(data) {
   return row;
 }
 
+// ==================== REPLY TO MESSAGE ====================
+// Kisi bhi message type ka chhota preview text banata hai (quoted block aur reply-bar dono ke liye)
+function replyPreviewSummary(data) {
+  if (data.deleted) return '🚫 Ye message delete kar diya gaya';
+  switch (data.type) {
+    case 'image': return '📷 Photo';
+    case 'document': return `📄 ${data.mediaName || 'Document'}`;
+    case 'location': return '📍 Location';
+    case 'audio': return '🎤 Voice message';
+    case 'contact': return `👤 ${data.contactName || 'Contact'}`;
+    default: return data.text || '';
+  }
+}
+
+function startReply(data) {
+  if (!data._id) { showToast('Ye purana message reply nahi ho sakta'); return; }
+  replyingTo = {
+    messageId: data._id,
+    fromUsername: data.username || data.from,
+    type: data.type,
+    text: replyPreviewSummary(data)
+  };
+  replyPreviewLabel.textContent = replyingTo.fromUsername === myUsername ? 'Apne aap ko reply' : `${replyingTo.fromUsername} ko reply`;
+  replyPreviewText.textContent = replyingTo.text;
+  replyPreviewBar.classList.remove('hidden');
+  messageInput.focus();
+}
+
+function cancelReply() {
+  replyingTo = null;
+  replyPreviewBar.classList.add('hidden');
+}
+
+cancelReplyBtn.addEventListener('click', cancelReply);
+
+// Quoted reply block banata hai jo kisi bhejay hue message ke bubble ke andar upar dikhta hai
+function buildReplyQuoteHtml(replyTo) {
+  if (!replyTo || !replyTo.messageId) return '';
+  const who = replyTo.fromUsername === myUsername ? 'Aap' : escapeHtml(replyTo.fromUsername || '');
+  return `<div class="msg-reply-quote"><span class="msg-reply-quote-user">${who}</span><span class="msg-reply-quote-text">${escapeHtml(replyTo.text || '')}</span></div>`;
+}
+
 function findMessageInConversations(messageId, room) {
   const list = conversationListForRoom(room);
   if (!list) return null;
@@ -884,6 +943,9 @@ messageForm.addEventListener('submit', (e) => {
 
 function sendMessage(payload) {
   if (!currentChat) return;
+  if (replyingTo) {
+    payload = { ...payload, replyTo: replyingTo };
+  }
   if (currentChat === 'public') {
     socket.emit('chatMessage', payload);
   } else {
@@ -893,6 +955,7 @@ function sendMessage(payload) {
     }
     socket.emit('privateMessage', { toUsername: currentChat, ...payload });
   }
+  cancelReply();
 }
 
 messageInput.addEventListener('input', () => {

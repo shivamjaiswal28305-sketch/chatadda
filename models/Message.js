@@ -21,7 +21,7 @@ const messageSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['text', 'image', 'document', 'location'],
+    enum: ['text', 'image', 'document', 'location', 'audio', 'contact'],
     default: 'text'
   },
   text: {
@@ -36,9 +36,23 @@ const messageSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  // Voice message ki duration (seconds) — audio player mein dikhane ke liye
+  mediaDuration: {
+    type: Number,
+    default: 0
+  },
   location: {
     lat: Number,
     lng: Number
+  },
+  // Contact share ke liye
+  contactName: {
+    type: String,
+    default: ''
+  },
+  contactPhone: {
+    type: String,
+    default: ''
   },
   readBy: [{
     type: mongoose.Schema.Types.ObjectId,

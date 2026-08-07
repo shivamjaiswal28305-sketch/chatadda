@@ -20,7 +20,18 @@ app.use(express.json());
 // Public folder ko dhoondo, chahe uske naam me koi invisible character ho
 const publicDirName = fs.readdirSync(__dirname, { withFileTypes: true })
   .find(e => e.isDirectory() && e.name.replace(/[^\x20-\x7E]/g, '') === 'public')?.name || 'public';
-app.use(express.static(path.join(__dirname, publicDirName)));
+app.use(express.static(path.join(__dirname, publicDirName), {
+  setHeaders: (res, filePath) => {
+    // index.html hamesha fresh chahiye (varna purana cached HTML purani JS/CSS files
+    // reference karta rahega). CSS/JS ko chhota cache diya hai kyunki unpe ?v= version
+    // query already lagi hui hai — naya deploy hote hi naya URL ban jaata hai.
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=300');
+    }
+  }
+}));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ---------- MongoDB connect ----------
@@ -81,6 +92,13 @@ app.post('/api/users/photo', async (req, res) => {
 
     const { photoUrl } = req.body;
     if (!photoUrl) return res.status(400).json({ error: 'Photo URL do' });
+
+    // Sirf apne /uploads/ route se aayi hui file allow karo — koi bhi arbitrary
+    // string (jisme HTML/quotes ho sakte hain) accept nahi karni, warna baad me
+    // frontend pe render hote waqt XSS ban sakti hai.
+    if (!/^\/uploads\/[a-zA-Z0-9._-]+$/.test(photoUrl)) {
+      return res.status(400).json({ error: 'Invalid photo URL' });
+    }
 
     const user = await User.findByIdAndUpdate(payload.userId, { photoUrl }, { new: true });
     if (!user) return res.status(404).json({ error: 'User nahi mila' });

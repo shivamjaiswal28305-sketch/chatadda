@@ -34,7 +34,10 @@ const upload = multer({
       'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       'text/plain'
     ];
-    if (allowedTypes.includes(file.mimetype)) cb(null, true);
+    // Voice messages: browsers MediaRecorder mimetype "audio/webm", "audio/webm;codecs=opus",
+    // "audio/ogg", "audio/mp4" waghera bhejte hain — isliye koi bhi "audio/*" allow kar diya.
+    const isAudio = file.mimetype.startsWith('audio/');
+    if (allowedTypes.includes(file.mimetype) || isAudio) cb(null, true);
     else cb(new Error('Ye file type allowed nahi hai'));
   }
 });
@@ -48,9 +51,12 @@ router.post('/', (req, res) => {
       return res.status(400).json({ error: 'Koi file nahi mili' });
     }
 
-    const isImage = req.file.mimetype.startsWith('image/');
+    let type = 'document';
+    if (req.file.mimetype.startsWith('image/')) type = 'image';
+    else if (req.file.mimetype.startsWith('audio/')) type = 'audio';
+
     res.json({
-      type: isImage ? 'image' : 'document',
+      type,
       url: `/uploads/${req.file.filename}`,
       name: req.file.originalname
     });

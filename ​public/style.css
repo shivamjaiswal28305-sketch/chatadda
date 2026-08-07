@@ -166,7 +166,20 @@ body {
   background: none; border: none; font-size: 22px; cursor: pointer;
 }
 .header-title { font-weight: 700; font-size: 16px; flex: 1; }
-.typing-indicator { font-size: 12px; color: #25D366; font-style: italic; }
+
+/* FIX: typing indicator ab kabhi header-subtitle (Online/Last seen) ke upar overlap
+   nahi karega — dono ko fixed-width/ellipsis di gayi hai aur typing-indicator ko
+   chhota, right-aligned rakha gaya hai taaki text wrap na ho. */
+.typing-indicator {
+  font-size: 12px;
+  color: #25D366;
+  font-style: italic;
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
 .chat-actions { display: flex; gap: 4px; }
 .action-btn {
   background: none; border: none; font-size: 18px; cursor: pointer;
@@ -285,6 +298,7 @@ body {
   }
   .sidebar.open { transform: translateX(0); }
   .msg { max-width: 85%; }
+  .typing-indicator { max-width: 90px; }
 }
 
 /* ==================== AUTH FORM (login/signup) ==================== */
@@ -653,8 +667,22 @@ body.dark-mode .edited-tag { color: #8696a0; }
   object-fit: cover; flex-shrink: 0;
 }
 .header-avatar.hidden { display: none; }
+
+/* FIX: header-title-wrap ko min-width:0 diya taaki flex container ke andar
+   lambe naam/text overflow ho kar dusre elements ke upar na chadhein. */
 .header-title-wrap { flex: 1; display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
-.header-subtitle { font-size: 12px; color: #667781; }
+.header-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.header-subtitle {
+  font-size: 12px;
+  color: #667781;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .header-subtitle.online { color: #25D366; font-weight: 600; }
 
 .my-profile-row {

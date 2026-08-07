@@ -146,13 +146,18 @@
       <div id="messages" class="messages"></div>
 
       <form id="messageForm" class="message-form hidden">
-        <button type="button" id="attachBtn" class="attach-btn" title="Attach">📎</button>
+        <div class="attach-menu-wrap">
+          <button type="button" id="plusBtn" class="attach-btn plus-btn" title="Attach">➕</button>
+          <div id="attachMenu" class="attach-menu hidden">
+            <button type="button" id="attachBtn" class="attach-menu-item">📎 Photo / Document</button>
+            <button type="button" id="locationBtn" class="attach-menu-item">📍 Location</button>
+            <button type="button" id="contactBtn" class="attach-menu-item">👤 Contact</button>
+          </div>
+        </div>
         <input id="fileInput" type="file" accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx" hidden>
-        <button type="button" id="locationBtn" class="attach-btn" title="Location bhejo">📍</button>
-        <button type="button" id="contactBtn" class="attach-btn" title="Contact bhejo">👤</button>
         <input id="messageInput" type="text" placeholder="Message likho..." autocomplete="off" maxlength="500">
         <button type="button" id="micBtn" class="attach-btn mic-btn" title="Dabaye rakho record karne ke liye">🎤</button>
-        <button type="submit" id="sendBtn" aria-label="Send">➤</button>
+        <button type="submit" id="sendBtn" class="hidden" aria-label="Send">➤</button>
       </form>
 
       <!-- Recording in progress bar -->

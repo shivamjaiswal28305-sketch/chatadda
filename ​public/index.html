@@ -91,11 +91,17 @@
         </div>
         <div id="typingIndicator" class="typing-indicator"></div>
         <div id="chatActions" class="chat-actions hidden">
-          <button id="audioCallBtn" class="action-btn" title="Audio Call">📞</button>
           <button id="videoCallBtn" class="action-btn" title="Video Call">📹</button>
-          <button id="wallpaperBtn" class="action-btn" title="Wallpaper">🖼️</button>
-          <button id="blockBtn" class="action-btn" title="Block/Unblock">🚫</button>
-          <button id="reportBtn" class="action-btn" title="Report">⚠️</button>
+          <button id="audioCallBtn" class="action-btn" title="Audio Call">📞</button>
+          <div class="more-menu-wrap">
+            <button id="moreOptionsBtn" class="action-btn" title="More">⋮</button>
+            <div id="moreOptionsMenu" class="more-options-menu hidden">
+              <button id="wallpaperBtn" class="more-option-item">🖼️ Wallpaper</button>
+              <button id="themeBtn" class="more-option-item">🎨 Theme</button>
+              <button id="blockBtn" class="more-option-item">🚫 Block/Unblock</button>
+              <button id="reportBtn" class="more-option-item">⚠️ Report</button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -112,15 +118,62 @@
         </div>
       </div>
 
+      <!-- Theme picker -->
+      <div id="themePicker" class="theme-picker hidden">
+        <p>Theme choose karo:</p>
+        <div class="theme-options">
+          <button class="theme-opt" data-theme="default" title="WhatsApp Green">
+            <span class="theme-swatch" style="background:#25D366"></span>Green
+          </button>
+          <button class="theme-opt" data-theme="telegram" title="Telegram Blue">
+            <span class="theme-swatch" style="background:#2AABEE"></span>Blue
+          </button>
+          <button class="theme-opt" data-theme="purple" title="Purple">
+            <span class="theme-swatch" style="background:#7C3AED"></span>Purple
+          </button>
+          <button class="theme-opt" data-theme="sunset" title="Sunset">
+            <span class="theme-swatch" style="background:#F97316"></span>Sunset
+          </button>
+          <button class="theme-opt" data-theme="ocean" title="Ocean">
+            <span class="theme-swatch" style="background:#0EA5A4"></span>Ocean
+          </button>
+          <button class="theme-opt" data-theme="rose" title="Rose">
+            <span class="theme-swatch" style="background:#FB7185"></span>Rose
+          </button>
+        </div>
+      </div>
+
       <div id="messages" class="messages"></div>
 
       <form id="messageForm" class="message-form hidden">
         <button type="button" id="attachBtn" class="attach-btn" title="Attach">📎</button>
         <input id="fileInput" type="file" accept="image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx" hidden>
         <button type="button" id="locationBtn" class="attach-btn" title="Location bhejo">📍</button>
+        <button type="button" id="contactBtn" class="attach-btn" title="Contact bhejo">👤</button>
         <input id="messageInput" type="text" placeholder="Message likho..." autocomplete="off" maxlength="500">
-        <button type="submit" aria-label="Send">➤</button>
+        <button type="button" id="micBtn" class="attach-btn mic-btn" title="Dabaye rakho record karne ke liye">🎤</button>
+        <button type="submit" id="sendBtn" aria-label="Send">➤</button>
       </form>
+
+      <!-- Recording in progress bar -->
+      <div id="recordingBar" class="recording-bar hidden">
+        <span class="recording-dot"></span>
+        <span id="recordingTimer">0:00</span>
+        <span class="recording-hint">Chhodo bhejne ke liye • Slide left cancel karne ke liye</span>
+      </div>
+
+      <!-- Manual contact entry (fallback jab Contact Picker support nahi karta) -->
+      <div id="contactFormModal" class="contact-form-modal hidden">
+        <div class="contact-form-card">
+          <p>Contact details daalo:</p>
+          <input id="contactNameInput" type="text" placeholder="Naam" maxlength="60">
+          <input id="contactPhoneInput" type="tel" placeholder="Phone number" maxlength="20">
+          <div class="contact-form-actions">
+            <button type="button" id="contactFormCancel">Cancel</button>
+            <button type="button" id="contactFormSend">Bhejo</button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
 
@@ -175,6 +228,56 @@
       <button id="switchCallTypeBtn" class="call-control-btn" title="Switch Audio/Video">📹</button>
       <button id="toggleCamBtn" class="call-control-btn hidden" title="Camera On/Off">📷</button>
       <button id="endCallBtn" class="call-control-btn end" title="End Call">📞</button>
+    </div>
+  </div>
+
+  <!-- Image Editor (photo bhejne se pehle edit karne ke liye) -->
+  <div id="imageEditorOverlay" class="image-editor-overlay hidden">
+    <div class="editor-topbar">
+      <button id="editorCancelBtn" class="editor-icon-btn" title="Cancel">✕</button>
+      <button id="editorRotateBtn" class="editor-icon-btn" title="Rotate">🔄</button>
+      <button id="editorSendBtn" class="editor-send-btn" title="Send">➤</button>
+    </div>
+
+    <div class="editor-canvas-wrap" id="editorCanvasWrap">
+      <canvas id="imageCanvas"></canvas>
+      <canvas id="drawCanvas"></canvas>
+      <div id="cropBox" class="crop-box hidden">
+        <div class="crop-handle tl"></div>
+        <div class="crop-handle tr"></div>
+        <div class="crop-handle bl"></div>
+        <div class="crop-handle br"></div>
+      </div>
+    </div>
+
+    <div id="filterStrip" class="editor-filter-strip hidden">
+      <button class="editor-filter-btn active" data-filter="none">Normal</button>
+      <button class="editor-filter-btn" data-filter="clarendon">Clarendon</button>
+      <button class="editor-filter-btn" data-filter="juno">Juno</button>
+      <button class="editor-filter-btn" data-filter="lark">Lark</button>
+      <button class="editor-filter-btn" data-filter="gingham">Gingham</button>
+      <button class="editor-filter-btn" data-filter="moon">Moon</button>
+    </div>
+
+    <div id="drawColorStrip" class="editor-color-strip hidden">
+      <button class="editor-color-btn active" data-color="#ffffff" style="background:#ffffff"></button>
+      <button class="editor-color-btn" data-color="#000000" style="background:#000000"></button>
+      <button class="editor-color-btn" data-color="#FF3B30" style="background:#FF3B30"></button>
+      <button class="editor-color-btn" data-color="#FFD60A" style="background:#FFD60A"></button>
+      <button class="editor-color-btn" data-color="#25D366" style="background:#25D366"></button>
+      <button class="editor-color-btn" data-color="#2AABEE" style="background:#2AABEE"></button>
+    </div>
+
+    <div id="cropActions" class="editor-crop-actions hidden">
+      <button id="cropCancelBtn">Cancel</button>
+      <button id="cropApplyBtn">Apply</button>
+    </div>
+
+    <div class="editor-bottom-toolbar">
+      <button class="editor-tool-btn" data-tool="crop" title="Crop">✂️</button>
+      <button class="editor-tool-btn" data-tool="filter" title="Filter">🎨</button>
+      <button class="editor-tool-btn" data-tool="draw" title="Draw">✏️</button>
+      <button class="editor-tool-btn" data-tool="text" title="Text">🔤</button>
     </div>
   </div>
 

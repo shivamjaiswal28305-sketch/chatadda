@@ -9,7 +9,8 @@ const messageSchema = new mongoose.Schema({
   fromUser: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    index: true
   },
   fromUsername: {
     type: String,
@@ -17,7 +18,8 @@ const messageSchema = new mongoose.Schema({
   },
   toUser: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'User',
+    index: true
   },
   type: {
     type: String,
@@ -36,7 +38,6 @@ const messageSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
-  // Voice message ki duration (seconds) — audio player mein dikhane ke liye
   mediaDuration: {
     type: Number,
     default: 0
@@ -45,7 +46,6 @@ const messageSchema = new mongoose.Schema({
     lat: Number,
     lng: Number
   },
-  // Contact share ke liye
   contactName: {
     type: String,
     default: ''
@@ -71,5 +71,8 @@ const messageSchema = new mongoose.Schema({
     default: false
   }
 }, { timestamps: true });
+
+// Fast Chat History Load Index (Room + Time)
+messageSchema.index({ room: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Message', messageSchema);

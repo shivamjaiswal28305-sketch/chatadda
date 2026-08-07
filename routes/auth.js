@@ -34,7 +34,7 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ error: 'Sahi phone number daalo' });
     }
     if (!password || password.length < 4) {
-      return res.status(400).json({ error: 'Password kam se kam 6 characters ka hona chahiye' });
+      return res.status(400).json({ error: 'Password kam se kam 4 characters ka hona chahiye' });
     }
 
     // Phone number duplicate check

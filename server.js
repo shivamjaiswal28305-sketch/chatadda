@@ -137,6 +137,17 @@ function findSocketIdByUsername(username) {
   return Object.keys(onlineUsers).find(id => onlineUsers[id].username === username);
 }
 
+// Client se aaya replyTo object saaf karke chhota, safe object banao (koi bhi extra/galat data na jaaye DB me)
+function sanitizeReplyTo(replyTo) {
+  if (!replyTo || !replyTo.messageId) return undefined;
+  return {
+    messageId: replyTo.messageId,
+    fromUsername: String(replyTo.fromUsername || '').slice(0, 40),
+    type: ALLOWED_MSG_TYPES.includes(replyTo.type) ? replyTo.type : 'text',
+    text: String(replyTo.text || '').slice(0, 120)
+  };
+}
+
 function publicRoomUsernames() {
   return Object.values(onlineUsers).filter(u => u.inPublicRoom).map(u => u.username);
 }
@@ -222,6 +233,8 @@ io.on('connection', (socket) => {
     const type = ALLOWED_MSG_TYPES.includes(data.type) ? data.type : 'text';
     const text = type === 'text' ? cleanMessage(String(data.text || '').slice(0, 500)) : '';
 
+    const replyTo = sanitizeReplyTo(data.replyTo);
+
     const msgDoc = await Message.create({
       room: 'public',
       fromUser: socket.userId,
@@ -233,7 +246,8 @@ io.on('connection', (socket) => {
       mediaDuration: type === 'audio' ? Number(data.duration || 0) : 0,
       location: data.location || undefined,
       contactName: type === 'contact' ? String(data.contactName || '').slice(0, 60) : '',
-      contactPhone: type === 'contact' ? String(data.contactPhone || '').slice(0, 20) : ''
+      contactPhone: type === 'contact' ? String(data.contactPhone || '').slice(0, 20) : '',
+      replyTo
     });
 
     io.emit('chatMessage', {
@@ -247,6 +261,7 @@ io.on('connection', (socket) => {
       location: msgDoc.location,
       contactName: msgDoc.contactName,
       contactPhone: msgDoc.contactPhone,
+      replyTo: msgDoc.replyTo,
       deleted: false,
       edited: false,
       reactions: [],
@@ -255,7 +270,7 @@ io.on('connection', (socket) => {
   });
 
   // ---------- PRIVATE MESSAGE ----------
-  socket.on('privateMessage', async ({ toUsername, text, type, mediaUrl, mediaName, duration, location, contactName, contactPhone }) => {
+  socket.on('privateMessage', async ({ toUsername, text, type, mediaUrl, mediaName, duration, location, contactName, contactPhone, replyTo }) => {
     if (!socket.username || !toUsername) return;
     const targetUser = await User.findOne({ username: toUsername });
     if (!targetUser) return;
@@ -263,6 +278,7 @@ io.on('connection', (socket) => {
     const msgType = ALLOWED_MSG_TYPES.includes(type) ? type : 'text';
     const cleanText = msgType === 'text' ? cleanMessage(String(text || '').slice(0, 500)) : '';
     const room = privateRoomId(socket.username, toUsername);
+    const safeReplyTo = sanitizeReplyTo(replyTo);
 
     const msgDoc = await Message.create({
       room,
@@ -276,7 +292,8 @@ io.on('connection', (socket) => {
       mediaDuration: msgType === 'audio' ? Number(duration || 0) : 0,
       location: location || undefined,
       contactName: msgType === 'contact' ? String(contactName || '').slice(0, 60) : '',
-      contactPhone: msgType === 'contact' ? String(contactPhone || '').slice(0, 20) : ''
+      contactPhone: msgType === 'contact' ? String(contactPhone || '').slice(0, 20) : '',
+      replyTo: safeReplyTo
     });
 
     const payload = {
@@ -291,6 +308,7 @@ io.on('connection', (socket) => {
       location: msgDoc.location,
       contactName: msgDoc.contactName,
       contactPhone: msgDoc.contactPhone,
+      replyTo: msgDoc.replyTo,
       deleted: false,
       edited: false,
       reactions: [],

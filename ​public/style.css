@@ -1089,3 +1089,77 @@ body.dark-mode .msg-contact-phone { color: #8696a0; }
   min-width: 40px;
   z-index: 10;
 }
+
+/* ==================== REPLY TO MESSAGE ==================== */
+.reply-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f0f2f5;
+  border-top: 1px solid #e2e2e2;
+  border-left: 4px solid var(--accent);
+}
+.reply-preview-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.reply-preview-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.reply-preview-text {
+  font-size: 12.5px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reply-preview-cancel {
+  background: none;
+  border: none;
+  font-size: 15px;
+  color: #667781;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
+/* Quoted block jo kisi bheje hue message ke bubble ke andar upar dikhta hai */
+.msg-reply-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: rgba(0,0,0,0.05);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 4px;
+}
+.msg-reply-quote-user {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.msg-reply-quote-text {
+  font-size: 12.5px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.dark-mode .reply-preview-bar {
+  background: #202c33;
+  border-top-color: #222d34;
+}
+body.dark-mode .reply-preview-text { color: #8696a0; }
+body.dark-mode .reply-preview-cancel { color: #8696a0; }
+body.dark-mode .msg-reply-quote {
+  background: rgba(255,255,255,0.08);
+}
+body.dark-mode .msg-reply-quote-text { color: #8696a0; }

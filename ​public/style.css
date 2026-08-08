@@ -683,24 +683,34 @@ body.dark-mode .edited-tag { color: #8696a0; }
 .contact-remove-btn:hover { color: #d33; }
 
 /* ==================== MESSAGE ACTIONS (edit / delete / react) ==================== */
-.msg { padding-right: 30px; }
-.msg.mine { padding-right: 44px; }
+/* WhatsApp jaisa behaviour: icons hamesha nahi dikhte, message pe tap karne par
+   ek floating toolbar upar khulta hai. Dobara tap karne se ya kahi aur tap karne se band ho jaata hai. */
+.msg { cursor: pointer; }
 .msg-actions {
   position: absolute;
-  top: 2px;
-  right: 4px;
-  display: flex;
+  top: -34px;
+  right: 6px;
+  display: none;
   gap: 2px;
+  background: #fff;
+  border-radius: 20px;
+  padding: 5px 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  z-index: 5;
 }
+.msg.mine .msg-actions { right: 0; }
+.msg.actions-open .msg-actions { display: flex; }
+.msg.actions-open { box-shadow: 0 0 0 2px var(--accent); }
 .msg-actions button {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 12px;
-  opacity: 0.45;
-  padding: 2px;
+  font-size: 15px;
+  opacity: 0.85;
+  padding: 3px 4px;
 }
 .msg-actions button:hover { opacity: 1; }
+body.dark-mode .msg-actions { background: #233138; }
 .msg-deleted-text { font-style: italic; color: #8696a0; }
 .edited-tag { font-size: 10px; color: #8696a0; font-style: italic; margin-left: 4px; }
 
@@ -1163,3 +1173,113 @@ body.dark-mode .msg-reply-quote {
   background: rgba(255,255,255,0.08);
 }
 body.dark-mode .msg-reply-quote-text { color: #8696a0; }
+
+/* ==================== FORWARD MESSAGE ==================== */
+.forward-modal-card { max-width: 340px; }
+.forward-target-list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.forward-target-item {
+  text-align: left;
+  padding: 11px 12px;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  background: #fafafa;
+  font-size: 14px;
+  cursor: pointer;
+}
+.forward-target-item:hover { background: #f0f2f5; }
+.forward-empty { font-size: 13px; color: #888; padding: 10px 0; }
+body.dark-mode .forward-target-item { background: #2a3942; border-color: #2a3942; color: #e9edef; }
+body.dark-mode .forward-target-item:hover { background: #34444d; }
+body.dark-mode .forward-empty { color: #8696a0; }
+
+.msg-forwarded-tag {
+  display: block;
+  font-size: 11.5px;
+  font-style: italic;
+  color: #667781;
+  margin-bottom: 2px;
+}
+body.dark-mode .msg-forwarded-tag { color: #8696a0; }
+
+/* ==================== PIN MESSAGE ==================== */
+.pinned-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #fff8dc;
+  border-bottom: 1px solid #f0e4a8;
+  cursor: pointer;
+}
+.pinned-icon { font-size: 14px; }
+.pinned-banner-text {
+  flex: 1;
+  font-size: 13px;
+  color: #6b5a00;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pinned-unpin-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #6b5a00;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+body.dark-mode .pinned-banner { background: #2a2a1a; border-bottom-color: #3a3a1a; }
+body.dark-mode .pinned-banner-text, body.dark-mode .pinned-unpin-btn { color: #e0d284; }
+
+.msg-highlight { animation: msgHighlightPulse 1.5s ease; }
+@keyframes msgHighlightPulse {
+  0% { background: rgba(255, 235, 59, 0.5); }
+  100% { background: transparent; }
+}
+
+/* ==================== IN-CHAT SEARCH ==================== */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #f0f2f5;
+  border-bottom: 1px solid #e2e2e2;
+}
+.search-bar input {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 20px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  outline: none;
+}
+.search-bar input:focus { border-color: var(--accent); }
+.search-result-count {
+  font-size: 12px;
+  color: #667781;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.search-close-btn {
+  background: none;
+  border: none;
+  font-size: 15px;
+  color: #667781;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.msg-search-match {
+  outline: 2px solid #ffc107;
+  outline-offset: 1px;
+}
+body.dark-mode .search-bar { background: #202c33; border-bottom-color: #222d34; }
+body.dark-mode .search-bar input { background: #2a3942; color: #e9edef; border-color: #2a3942; }
+body.dark-mode .search-result-count, body.dark-mode .search-close-btn { color: #8696a0; }

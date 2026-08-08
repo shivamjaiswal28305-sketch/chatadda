@@ -48,6 +48,7 @@
       <div class="sidebar-head">
         <img src="logo.svg" alt="ChatAdda" class="brand-logo-mini">
         <span>ChatAdda</span>
+        <button id="notifyBtn" class="logout-btn notify-btn" title="Notifications On/Off">🔔</button>
         <button id="themeToggleBtn" class="logout-btn theme-toggle-btn" title="Dark/Light Mode">🌙</button>
         <button id="logoutBtn" class="logout-btn" title="Logout">⏻</button>
       </div>
@@ -90,6 +91,7 @@
           <div class="header-subtitle" id="headerSubtitle"></div>
         </div>
         <div id="typingIndicator" class="typing-indicator"></div>
+        <button id="searchToggleBtn" class="action-btn hidden" title="Chat me search karo">🔍</button>
         <div id="chatActions" class="chat-actions hidden">
           <button id="videoCallBtn" class="action-btn" title="Video Call">📹</button>
           <button id="audioCallBtn" class="action-btn" title="Audio Call">📞</button>
@@ -104,6 +106,20 @@
           </div>
         </div>
       </header>
+
+      <!-- In-chat search bar -->
+      <div id="searchBar" class="search-bar hidden">
+        <input id="searchInput" type="text" placeholder="Is chat me search karo...">
+        <span id="searchResultCount" class="search-result-count"></span>
+        <button type="button" id="searchCloseBtn" class="search-close-btn">✕</button>
+      </div>
+
+      <!-- Pinned message banner -->
+      <div id="pinnedBanner" class="pinned-banner hidden">
+        <span class="pinned-icon">📌</span>
+        <span id="pinnedBannerText" class="pinned-banner-text"></span>
+        <button type="button" id="unpinBtn" class="pinned-unpin-btn" title="Unpin">✕</button>
+      </div>
 
       <!-- Wallpaper picker -->
       <div id="wallpaperPicker" class="wallpaper-picker hidden">
@@ -184,6 +200,16 @@
           <div class="contact-form-actions">
             <button type="button" id="contactFormCancel">Cancel</button>
             <button type="button" id="contactFormSend">Bhejo</button>
+          </div>
+        </div>
+      </div>
+      <!-- Forward message modal -->
+      <div id="forwardModal" class="contact-form-modal hidden">
+        <div class="contact-form-card forward-modal-card">
+          <p>Kise forward karna hai?</p>
+          <div id="forwardTargetList" class="forward-target-list"></div>
+          <div class="contact-form-actions">
+            <button type="button" id="forwardModalCancel">Cancel</button>
           </div>
         </div>
       </div>

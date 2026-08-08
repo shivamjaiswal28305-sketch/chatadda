@@ -52,6 +52,18 @@ const replyPreviewBar = document.getElementById('replyPreviewBar');
 const replyPreviewLabel = document.getElementById('replyPreviewLabel');
 const replyPreviewText = document.getElementById('replyPreviewText');
 const cancelReplyBtn = document.getElementById('cancelReplyBtn');
+const forwardModal = document.getElementById('forwardModal');
+const forwardTargetList = document.getElementById('forwardTargetList');
+const forwardModalCancel = document.getElementById('forwardModalCancel');
+const pinnedBanner = document.getElementById('pinnedBanner');
+const pinnedBannerText = document.getElementById('pinnedBannerText');
+const unpinBtn = document.getElementById('unpinBtn');
+const searchToggleBtn = document.getElementById('searchToggleBtn');
+const searchBar = document.getElementById('searchBar');
+const searchInput = document.getElementById('searchInput');
+const searchCloseBtn = document.getElementById('searchCloseBtn');
+const searchResultCount = document.getElementById('searchResultCount');
+const notifyBtn = document.getElementById('notifyBtn');
 const contactFormCancel = document.getElementById('contactFormCancel');
 const contactFormSend = document.getElementById('contactFormSend');
 
@@ -368,6 +380,9 @@ let onlineUsernames = []; // sirf Adda Room ke andar wale log
 const conversations = { public: [] };
 let blockedUsers = new Set(JSON.parse(localStorage.getItem('chatadda_blocked') || '[]'));
 let replyingTo = null; // { messageId, fromUsername, type, text } — jis message ka reply likha ja raha hai
+let forwardingMessage = null; // jo message forward ho raha hai
+let pinnedMessages = {}; // { roomKey: {messageId, text, type, fromUsername} }
+let searchMode = false;
 
 function saveBlocked() {
   localStorage.setItem('chatadda_blocked', JSON.stringify([...blockedUsers]));
@@ -474,6 +489,7 @@ socket.on('joined', (finalName) => {
   showEmptyState();
   renderSavedContacts();
   loadAllUsersPresence();
+  initPushNotifications();
 });
 
 function showEmptyState() {
@@ -481,6 +497,7 @@ function showEmptyState() {
   publicRoomBtn.classList.remove('active');
   headerTitle.textContent = 'ChatAdda';
   chatActions.classList.add('hidden');
+  searchToggleBtn.classList.add('hidden');
   messageForm.classList.add('hidden');
   messagesEl.className = 'messages';
   messagesEl.innerHTML = '<div class="empty-state">👋 Kisi chat pe ya Adda Room pe tap karo shuru karne ke liye</div>';
@@ -501,7 +518,8 @@ async function loadHistory(room) {
         _id: m._id, username: m.fromUsername, type: m.type, text: m.text,
         mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
         deleted: !!m.deleted, edited: !!m.edited, reactions: m.reactions || [],
-        replyTo: m.replyTo || null,
+        replyTo: m.replyTo || null, forwarded: !!m.forwarded, pinned: !!m.pinned,
+        contactName: m.contactName, contactPhone: m.contactPhone, mediaDuration: m.mediaDuration,
         createdAt: m.createdAt
       }));
       conversations.public._loaded = true;
@@ -536,6 +554,7 @@ function renderUserList() {
 async function switchToChat(target) {
   // Chat badalte waqt purana reply-in-progress clear kar do, warna galat chat me reply chala jaayega
   cancelReply();
+  if (searchMode) closeSearch();
 
   // Adda Room se bahar jaate waqt presence hata do
   if (currentChat === 'public' && target !== 'public') {
@@ -544,6 +563,7 @@ async function switchToChat(target) {
 
   currentChat = target;
   messageForm.classList.remove('hidden');
+  searchToggleBtn.classList.remove('hidden');
   publicRoomBtn.classList.toggle('active', target === 'public');
   headerTitle.textContent = target === 'public' ? 'Adda Room' : target;
   chatActions.classList.toggle('hidden', target === 'public');
@@ -579,7 +599,8 @@ async function switchToChat(target) {
           _id: m._id, from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
           type: m.type, text: m.text, mediaUrl: m.mediaUrl, mediaName: m.mediaName, location: m.location,
           deleted: !!m.deleted, edited: !!m.edited, reactions: m.reactions || [],
-          replyTo: m.replyTo || null,
+          replyTo: m.replyTo || null, forwarded: !!m.forwarded, pinned: !!m.pinned,
+          contactName: m.contactName, contactPhone: m.contactPhone, mediaDuration: m.mediaDuration,
           createdAt: m.createdAt,
           read: m.readBy && m.readBy.length > 0
         }));
@@ -592,6 +613,17 @@ async function switchToChat(target) {
   renderMessages();
   applyWallpaper(target);
   wallpaperPicker.classList.add('hidden');
+
+  // Is chat me koi pinned message hai to banner dikhao, warna hide karo
+  const roomKey = target === 'public' ? 'public' : privateRoomKey(target);
+  const list = conversations[target] || [];
+  const pinnedMsg = list.find(m => m.pinned);
+  if (pinnedMsg) {
+    showPinnedBanner(roomKey, { messageId: String(pinnedMsg._id), type: pinnedMsg.type, text: pinnedMsg.text, fromUsername: pinnedMsg.username || pinnedMsg.from, contactName: pinnedMsg.contactName, mediaName: pinnedMsg.mediaName });
+  } else {
+    pinnedBanner.classList.add('hidden');
+  }
+
   if (window.innerWidth <= 720) {
     sidebar.classList.remove('open');
     sidebarBackdrop.classList.add('hidden');
@@ -703,6 +735,7 @@ function appendMessageToDOM(data) {
 
   // Time hamesha yahin, render hote waqt, phone ke local timezone se nikalte hain (createdAt se)
   div.innerHTML = `
+    ${data.forwarded ? '<span class="msg-forwarded-tag">➡️ Forwarded</span>' : ''}
     ${isMine ? '' : `<span class="msg-user">${escapeHtml(data.username || data.from)}</span>`}
     ${!data.deleted ? buildReplyQuoteHtml(data.replyTo) : ''}
     ${bodyHtml}
@@ -718,6 +751,18 @@ function appendMessageToDOM(data) {
     replyActionBtn.textContent = '↩️';
     replyActionBtn.addEventListener('click', () => startReply(data));
     actions.appendChild(replyActionBtn);
+
+    const forwardActionBtn = document.createElement('button');
+    forwardActionBtn.title = 'Forward';
+    forwardActionBtn.textContent = '➡️';
+    forwardActionBtn.addEventListener('click', () => startForward(data));
+    actions.appendChild(forwardActionBtn);
+
+    const pinActionBtn = document.createElement('button');
+    pinActionBtn.title = 'Pin';
+    pinActionBtn.textContent = '📌';
+    pinActionBtn.addEventListener('click', () => togglePinMessage(data));
+    actions.appendChild(pinActionBtn);
 
     const reactBtn = document.createElement('button');
     reactBtn.title = 'React';
@@ -852,6 +897,278 @@ function buildReplyQuoteHtml(replyTo) {
   if (!replyTo || !replyTo.messageId) return '';
   const who = replyTo.fromUsername === myUsername ? 'Aap' : escapeHtml(replyTo.fromUsername || '');
   return `<div class="msg-reply-quote"><span class="msg-reply-quote-user">${who}</span><span class="msg-reply-quote-text">${escapeHtml(replyTo.text || '')}</span></div>`;
+}
+
+// ==================== FORWARD MESSAGE ====================
+function startForward(data) {
+  if (!data._id) { showToast('Ye purana message forward nahi ho sakta'); return; }
+  forwardingMessage = data;
+  buildForwardTargetList();
+  forwardModal.classList.remove('hidden');
+}
+
+function closeForwardModal() {
+  forwardingMessage = null;
+  forwardModal.classList.add('hidden');
+  forwardTargetList.innerHTML = '';
+}
+
+forwardModalCancel.addEventListener('click', closeForwardModal);
+
+function buildForwardTargetList() {
+  forwardTargetList.innerHTML = '';
+
+  const targets = new Set();
+  targets.add('public');
+  Object.keys(conversations).forEach(k => { if (k !== 'public') targets.add(k); });
+  onlineUsernames.forEach(u => { if (u !== myUsername) targets.add(u); });
+
+  if (targets.size === 0) {
+    forwardTargetList.innerHTML = '<p class="forward-empty">Koi chat available nahi hai</p>';
+    return;
+  }
+
+  targets.forEach((target) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'forward-target-item';
+    item.textContent = target === 'public' ? '🌐 Adda Room (Public)' : `👤 ${target}`;
+    item.addEventListener('click', () => sendForwardTo(target));
+    forwardTargetList.appendChild(item);
+  });
+}
+
+function sendForwardTo(target) {
+  if (!forwardingMessage) return;
+  const data = forwardingMessage;
+  const payload = {
+    type: data.type,
+    text: data.text || '',
+    mediaUrl: data.mediaUrl || '',
+    mediaName: data.mediaName || '',
+    duration: data.duration || 0,
+    location: data.location || undefined,
+    contactName: data.contactName || '',
+    contactPhone: data.contactPhone || '',
+    forwarded: true
+  };
+
+  if (target === 'public') {
+    socket.emit('chatMessage', payload);
+  } else {
+    if (blockedUsers.has(target)) {
+      showToast('Aapne isse block kiya hai. Pehle unblock karo.');
+      return;
+    }
+    socket.emit('privateMessage', { toUsername: target, ...payload });
+  }
+
+  showToast('Message forward ho gaya');
+  closeForwardModal();
+}
+
+// ==================== PIN MESSAGE ====================
+function togglePinMessage(data) {
+  if (!data._id) { showToast('Ye purana message pin nahi ho sakta'); return; }
+  const room = currentChat === 'public' ? 'public' : privateRoomKey(currentChat);
+  const isCurrentlyPinned = pinnedMessages[room] && pinnedMessages[room].messageId === String(data._id);
+  if (isCurrentlyPinned) {
+    socket.emit('unpinMessage', { messageId: data._id, room });
+  } else {
+    socket.emit('pinMessage', { messageId: data._id });
+  }
+}
+
+// Private room ki id server jaisi hi banao (dono usernames ko sorted joda hua)
+function privateRoomKey(otherUsername) {
+  return [myUsername, otherUsername].sort().join('__');
+}
+
+function showPinnedBanner(room, info) {
+  pinnedMessages[room] = info;
+  const activeRoom = currentChat === 'public' ? 'public' : privateRoomKey(currentChat);
+  if (room !== activeRoom) return;
+  pinnedBannerText.textContent = `📌 ${info.fromUsername}: ${replyPreviewSummary(info)}`;
+  pinnedBanner.classList.remove('hidden');
+  pinnedBanner.onclick = (e) => {
+    if (e.target === unpinBtn) return;
+    const el = document.querySelector(`[data-msg-id="${info.messageId}"]`);
+    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('msg-highlight'); setTimeout(() => el.classList.remove('msg-highlight'), 1500); }
+  };
+}
+
+function hidePinnedBanner(room) {
+  delete pinnedMessages[room];
+  const activeRoom = currentChat === 'public' ? 'public' : privateRoomKey(currentChat);
+  if (room === activeRoom) pinnedBanner.classList.add('hidden');
+}
+
+unpinBtn.addEventListener('click', () => {
+  const room = currentChat === 'public' ? 'public' : privateRoomKey(currentChat);
+  const info = pinnedMessages[room];
+  if (info) socket.emit('unpinMessage', { messageId: info.messageId, room });
+});
+
+// Server se room id (public ya sorted-username pair) aaya hai, usse conversations{} ki key me convert karta hai
+function conversationKeyForRoom(room) {
+  if (room === 'public') return 'public';
+  const parts = room.split('__');
+  const other = parts.find(u => u !== myUsername);
+  return other && conversations[other] ? other : null;
+}
+
+socket.on('messagePinned', (info) => {
+  showPinnedBanner(info.room, info);
+  const key = conversationKeyForRoom(info.room);
+  if (key && conversations[key]) {
+    conversations[key].forEach(m => { m.pinned = String(m._id) === info.messageId; });
+  }
+});
+
+socket.on('messageUnpinned', ({ room }) => {
+  hidePinnedBanner(room);
+  const key = conversationKeyForRoom(room);
+  if (key && conversations[key]) {
+    conversations[key].forEach(m => { m.pinned = false; });
+  }
+});
+
+// ==================== IN-CHAT SEARCH ====================
+function openSearch() {
+  searchMode = true;
+  searchBar.classList.remove('hidden');
+  searchInput.value = '';
+  searchInput.focus();
+  searchResultCount.textContent = '';
+  clearSearchHighlights();
+}
+
+function closeSearch() {
+  searchMode = false;
+  searchBar.classList.add('hidden');
+  clearSearchHighlights();
+}
+
+function clearSearchHighlights() {
+  document.querySelectorAll('.msg-search-match').forEach(el => el.classList.remove('msg-search-match'));
+}
+
+function runSearch() {
+  clearSearchHighlights();
+  const q = searchInput.value.trim().toLowerCase();
+  if (!q) { searchResultCount.textContent = ''; return; }
+
+  const list = conversations[currentChat] || [];
+  let matchCount = 0;
+  let firstMatchEl = null;
+  list.forEach((data) => {
+    if (data.deleted || data.type !== 'text' || !data.text) return;
+    if (data.text.toLowerCase().includes(q)) {
+      matchCount++;
+      const el = document.querySelector(`[data-msg-id="${data._id}"]`);
+      if (el) {
+        el.classList.add('msg-search-match');
+        if (!firstMatchEl) firstMatchEl = el;
+      }
+    }
+  });
+
+  searchResultCount.textContent = matchCount > 0 ? `${matchCount} match mila` : 'Kuch nahi mila';
+  if (firstMatchEl) firstMatchEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+searchToggleBtn.addEventListener('click', () => {
+  if (searchMode) closeSearch(); else openSearch();
+});
+searchCloseBtn.addEventListener('click', closeSearch);
+searchInput.addEventListener('input', runSearch);
+
+// ==================== PUSH NOTIFICATIONS ====================
+// VAPID public key ko browser ke format (Uint8Array) me convert karta hai
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function initPushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    await navigator.serviceWorker.register('/sw.js');
+    updateNotifyBtnState();
+  } catch (err) {
+    console.error('Service worker register nahi hua:', err);
+  }
+}
+
+function updateNotifyBtnState() {
+  if (!notifyBtn) return;
+  if (!('Notification' in window)) { notifyBtn.classList.add('hidden'); return; }
+  const on = Notification.permission === 'granted' && localStorage.getItem('chatadda_push_on') === '1';
+  notifyBtn.textContent = on ? '🔔' : '🔕';
+  notifyBtn.title = on ? 'Notifications ON — band karne ke liye tap karo' : 'Notifications OFF — chalu karne ke liye tap karo';
+}
+
+async function enablePushNotifications() {
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    showToast('Notification permission nahi mili. Browser settings me jaake allow karo.');
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const keyRes = await fetch('/api/push/vapid-public-key');
+    const { publicKey } = await keyRes.json();
+    if (!publicKey) { showToast('Push abhi server pe setup nahi hai'); return; }
+
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+    }
+    await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: myUsername, subscription: sub })
+    });
+    localStorage.setItem('chatadda_push_on', '1');
+    showToast('Notifications chalu ho gaye 🔔');
+  } catch (err) {
+    console.error('Push subscribe fail:', err);
+    showToast('Notifications chalu nahi ho paaye');
+  }
+  updateNotifyBtnState();
+}
+
+async function disablePushNotifications() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await fetch('/api/push/unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: sub.endpoint })
+      });
+      await sub.unsubscribe();
+    }
+  } catch (err) { /* ignore */ }
+  localStorage.setItem('chatadda_push_on', '0');
+  showToast('Notifications band ho gaye 🔕');
+  updateNotifyBtnState();
+}
+
+if (notifyBtn) {
+  notifyBtn.addEventListener('click', () => {
+    if (!('Notification' in window)) { showToast('Ye browser notifications support nahi karta'); return; }
+    const isOn = Notification.permission === 'granted' && localStorage.getItem('chatadda_push_on') === '1';
+    if (isOn) disablePushNotifications(); else enablePushNotifications();
+  });
 }
 
 function findMessageInConversations(messageId, room) {

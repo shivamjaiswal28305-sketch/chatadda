@@ -8,8 +8,10 @@ const mongoose = require('mongoose');
 
 const User = require('./models/User');
 const Message = require('./models/Message');
+const PushSubscription = require('./models/PushSubscription');
 const { router: authRouter, verifyToken } = require('./routes/auth');
 const uploadRouter = require('./routes/upload');
+const webpush = require('web-push');
 
 const app = express();
 const server = http.createServer(app);
@@ -40,9 +42,86 @@ mongoose.connect(MONGODB_URI)
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.error('MongoDB connection error:', err.message));
 
+// ---------- Push notifications (Web Push / VAPID) ----------
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails('mailto:chatadda@example.com', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+} else {
+  console.warn('VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY set nahi hain — push notifications kaam nahi karengi.');
+}
+
+// Push notification ke andar dikhne wala chhota preview text banata hai
+function replyPushSummary(type, text, contactName) {
+  switch (type) {
+    case 'image': return '📷 Photo bheji';
+    case 'document': return '📄 Document bheja';
+    case 'location': return '📍 Location share ki';
+    case 'audio': return '🎤 Voice message bheja';
+    case 'contact': return `👤 Contact share ki${contactName ? ': ' + contactName : ''}`;
+    default: return text || 'Naya message';
+  }
+}
+
+// Diye gaye username ke saare saved devices ko push notification bhejta hai.
+// Agar koi subscription expire/invalid ho gayi ho (410/404) to use DB se hata deta hai.
+async function sendPushToUser(username, { title, body, url }) {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
+  const subs = await PushSubscription.find({ username });
+  if (subs.length === 0) return;
+
+  const payload = JSON.stringify({ title, body, url: url || '/' });
+  await Promise.all(subs.map(async (sub) => {
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } },
+        payload
+      );
+    } catch (err) {
+      if (err.statusCode === 404 || err.statusCode === 410) {
+        await PushSubscription.deleteOne({ _id: sub._id });
+      }
+    }
+  }));
+}
+
 // ---------- REST routes ----------
 app.use('/api/auth', authRouter);
 app.use('/api/upload', uploadRouter);
+
+// Client ko VAPID public key deta hai taaki wo pushManager.subscribe() kar sake
+app.get('/api/push/vapid-public-key', (req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+// Naya push subscription save/update karo (username + browser ka endpoint/keys)
+app.post('/api/push/subscribe', async (req, res) => {
+  try {
+    const { username, subscription } = req.body;
+    if (!username || !subscription || !subscription.endpoint || !subscription.keys) {
+      return res.status(400).json({ error: 'Invalid subscription data' });
+    }
+    await PushSubscription.findOneAndUpdate(
+      { endpoint: subscription.endpoint },
+      { username, endpoint: subscription.endpoint, keys: subscription.keys },
+      { upsert: true, new: true }
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Subscription save nahi ho payi' });
+  }
+});
+
+// Notifications band karte waqt subscription hata do
+app.post('/api/push/unsubscribe', async (req, res) => {
+  try {
+    const { endpoint } = req.body;
+    if (endpoint) await PushSubscription.deleteOne({ endpoint });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Unsubscribe fail hua' });
+  }
+});
 
 // Chat history: last 50 messages of a room (public or a private pair-id)
 app.get('/api/messages/:room', async (req, res) => {
@@ -234,6 +313,7 @@ io.on('connection', (socket) => {
     const text = type === 'text' ? cleanMessage(String(data.text || '').slice(0, 500)) : '';
 
     const replyTo = sanitizeReplyTo(data.replyTo);
+    const forwarded = !!data.forwarded;
 
     const msgDoc = await Message.create({
       room: 'public',
@@ -247,7 +327,8 @@ io.on('connection', (socket) => {
       location: data.location || undefined,
       contactName: type === 'contact' ? String(data.contactName || '').slice(0, 60) : '',
       contactPhone: type === 'contact' ? String(data.contactPhone || '').slice(0, 20) : '',
-      replyTo
+      replyTo,
+      forwarded
     });
 
     io.emit('chatMessage', {
@@ -262,6 +343,8 @@ io.on('connection', (socket) => {
       contactName: msgDoc.contactName,
       contactPhone: msgDoc.contactPhone,
       replyTo: msgDoc.replyTo,
+      forwarded: msgDoc.forwarded,
+      pinned: false,
       deleted: false,
       edited: false,
       reactions: [],
@@ -270,7 +353,7 @@ io.on('connection', (socket) => {
   });
 
   // ---------- PRIVATE MESSAGE ----------
-  socket.on('privateMessage', async ({ toUsername, text, type, mediaUrl, mediaName, duration, location, contactName, contactPhone, replyTo }) => {
+  socket.on('privateMessage', async ({ toUsername, text, type, mediaUrl, mediaName, duration, location, contactName, contactPhone, replyTo, forwarded }) => {
     if (!socket.username || !toUsername) return;
     const targetUser = await User.findOne({ username: toUsername });
     if (!targetUser) return;
@@ -279,6 +362,7 @@ io.on('connection', (socket) => {
     const cleanText = msgType === 'text' ? cleanMessage(String(text || '').slice(0, 500)) : '';
     const room = privateRoomId(socket.username, toUsername);
     const safeReplyTo = sanitizeReplyTo(replyTo);
+    const isForwarded = !!forwarded;
 
     const msgDoc = await Message.create({
       room,
@@ -293,7 +377,8 @@ io.on('connection', (socket) => {
       location: location || undefined,
       contactName: msgType === 'contact' ? String(contactName || '').slice(0, 60) : '',
       contactPhone: msgType === 'contact' ? String(contactPhone || '').slice(0, 20) : '',
-      replyTo: safeReplyTo
+      replyTo: safeReplyTo,
+      forwarded: isForwarded
     });
 
     const payload = {
@@ -309,6 +394,8 @@ io.on('connection', (socket) => {
       contactName: msgDoc.contactName,
       contactPhone: msgDoc.contactPhone,
       replyTo: msgDoc.replyTo,
+      forwarded: msgDoc.forwarded,
+      pinned: false,
       deleted: false,
       edited: false,
       reactions: [],
@@ -318,6 +405,15 @@ io.on('connection', (socket) => {
     const targetId = findSocketIdByUsername(toUsername);
     if (targetId) io.to(targetId).emit('privateMessage', payload);
     socket.emit('privateMessage', payload);
+
+    // Recipient abhi socket se connected nahi hai (app band ya background me) — push notification bhejo
+    if (!targetId) {
+      sendPushToUser(toUsername, {
+        title: socket.username,
+        body: replyPushSummary(msgType, cleanText, contactName),
+        url: '/'
+      }).catch(() => {});
+    }
   });
 
   // ---------- EDIT MESSAGE (sirf apna, sirf text type) ----------
@@ -386,6 +482,39 @@ io.on('connection', (socket) => {
         room: msg.room,
         reactions: msg.reactions
       });
+    } catch (err) { /* ignore */ }
+  });
+
+  // ---------- PIN MESSAGE ----------
+  socket.on('pinMessage', async ({ messageId }) => {
+    if (!socket.username || !messageId) return;
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg || msg.deleted) return;
+
+      // Ek room me ek time pe ek hi pinned message rahega (WhatsApp jaisa simple behaviour)
+      await Message.updateMany({ room: msg.room, pinned: true }, { pinned: false });
+      msg.pinned = true;
+      await msg.save();
+
+      broadcastToRoom(msg.room, 'messagePinned', {
+        room: msg.room,
+        messageId: String(msg._id),
+        type: msg.type,
+        text: msg.text,
+        fromUsername: msg.fromUsername
+      });
+    } catch (err) { /* ignore */ }
+  });
+
+  socket.on('unpinMessage', async ({ messageId, room }) => {
+    if (!socket.username || !messageId) return;
+    try {
+      const msg = await Message.findById(messageId);
+      if (!msg) return;
+      msg.pinned = false;
+      await msg.save();
+      broadcastToRoom(msg.room || room, 'messageUnpinned', { room: msg.room || room });
     } catch (err) { /* ignore */ }
   });
 

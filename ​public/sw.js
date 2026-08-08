@@ -1,12 +1,45 @@
-// ChatAdda service worker — sirf push notifications ke liye
-// (koi offline caching nahi ki, taaki app hamesha latest version load kare)
+// ChatAdda service worker
+// - Push notifications (jaisa pehle tha)
+// - PWA installability + basic offline caching (app shell)
 
-self.addEventListener('install', () => {
-  self.skipWaiting();
+const CACHE_NAME = 'chatadda-cache-v1';
+const APP_SHELL = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/logo.svg'
+];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(
+        keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
+
+// Sirf GET requests cache karo — POST/socket.io/API calls ko seedha network pe jaane do
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
+
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+      return fetch(event.request).catch(() => cached);
+    })
+  );
 });
 
 self.addEventListener('push', (event) => {

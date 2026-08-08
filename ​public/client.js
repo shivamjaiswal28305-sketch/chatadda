@@ -681,6 +681,14 @@ async function doPhoneSearch() {
 }
 
 // ==================== MESSAGE RENDERING ====================
+function closeAllMessageActions() {
+  document.querySelectorAll('.msg.actions-open').forEach(el => el.classList.remove('actions-open'));
+}
+// Chat ke khaali area pe tap karo to khula hua toolbar apne aap band ho jaaye
+messagesEl.addEventListener('click', (e) => {
+  if (e.target === messagesEl) closeAllMessageActions();
+});
+
 function renderMessages() {
   messagesEl.innerHTML = '';
   const list = conversations[currentChat] || [];
@@ -784,7 +792,17 @@ function appendMessageToDOM(data) {
       delBtn.addEventListener('click', () => deleteMessageEveryone(data));
       actions.appendChild(delBtn);
     }
+    // Koi bhi action button dabate hi toolbar apne aap band ho jaaye
+    actions.addEventListener('click', () => setTimeout(closeAllMessageActions, 30));
     div.appendChild(actions);
+
+    // WhatsApp jaisa: message pe tap karo to toolbar khule/band ho, links/audio/reactions pe tap normal kaam kare
+    div.addEventListener('click', (e) => {
+      if (e.target.closest('a, audio, .msg-actions, .msg-reactions-row')) return;
+      const wasOpen = div.classList.contains('actions-open');
+      closeAllMessageActions();
+      if (!wasOpen) div.classList.add('actions-open');
+    });
   }
 
   if (data.reactions && data.reactions.length > 0) {

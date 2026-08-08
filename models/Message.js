@@ -72,6 +72,14 @@ const messageSchema = new mongoose.Schema({
       default: ''
     }
   },
+  forwarded: {
+    type: Boolean,
+    default: false
+  },
+  pinned: {
+    type: Boolean,
+    default: false
+  },
   readBy: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

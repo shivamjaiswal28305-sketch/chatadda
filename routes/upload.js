@@ -1,26 +1,14 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const cloudinary = require('../config/cloudinary');
 
 const router = express.Router();
 
-const uploadsDir = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `${unique}-${safeName}`);
-  }
-});
-
+// Files disk pe save nahi hote — sirf RAM me hold hote hain, phir seedha Cloudinary
+// pe stream ho jaate hain. Render ka disk restart pe wipe ho jaata hai, isliye
+// permanent storage ke liye Cloudinary use kar rahe hain (DP + chat photos/files).
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 }, // 15MB, same limit as frontend
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
@@ -42,8 +30,20 @@ const upload = multer({
   }
 });
 
+// Buffer ko Cloudinary pe upload karta hai (Promise wrap kiya hai kyunki
+// upload_stream callback-style hai)
+function uploadBufferToCloudinary(buffer, options) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(options, (err, result) => {
+      if (err) reject(err);
+      else resolve(result);
+    });
+    stream.end(buffer);
+  });
+}
+
 router.post('/', (req, res) => {
-  upload.single('file')(req, res, (err) => {
+  upload.single('file')(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: err.message || 'Upload fail hua' });
     }
@@ -55,11 +55,26 @@ router.post('/', (req, res) => {
     if (req.file.mimetype.startsWith('image/')) type = 'image';
     else if (req.file.mimetype.startsWith('audio/')) type = 'audio';
 
-    res.json({
-      type,
-      url: `/uploads/${req.file.filename}`,
-      name: req.file.originalname
-    });
+    // Cloudinary "auto" resource_type khud dekh ke image/video/raw (pdf, doc, audio) tay kar leta hai.
+    // Non-image files ke liuse asli filename raakhna zaroori hai (varna download pe naam kharab dikhega).
+    try {
+      const result = await uploadBufferToCloudinary(req.file.buffer, {
+        folder: 'chatadda',
+        resource_type: 'auto',
+        use_filename: true,
+        unique_filename: true,
+        filename_override: req.file.originalname
+      });
+
+      res.json({
+        type,
+        url: result.secure_url,
+        name: req.file.originalname
+      });
+    } catch (cloudErr) {
+      console.error('Cloudinary upload error:', cloudErr.message);
+      res.status(500).json({ error: 'File cloud pe upload nahi ho payi' });
+    }
   });
 });
 

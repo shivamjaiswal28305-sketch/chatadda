@@ -36,7 +36,7 @@
       <form id="signupForm" class="auth-form hidden">
         <input id="signupUsername" type="text" placeholder="Username" required maxlength="20">
         <input id="signupPhone" type="tel" placeholder="Phone number" required maxlength="15">
-        <input id="signupPassword" type="password" placeholder="Password (kam se kam 4 characters)" required maxlength="50">
+        <input id="signupPassword" type="password" placeholder="Password (kam se kam 6 characters)" required maxlength="50">
         <button type="submit">Account banao →</button>
       </form>
 
@@ -63,6 +63,10 @@
         <span class="my-profile-label">Tap to change your DP</span>
         <input id="avatarFileInput" type="file" accept="image/*" hidden>
       </div>
+
+      <!-- Stories ring (Instagram/WhatsApp Status jaisa) -->
+      <div id="storiesRing" class="stories-ring"></div>
+      <input id="storyFileInput" type="file" accept="image/*,video/*" hidden>
 
       <!-- Phone number se dhoondo -->
       <div class="search-box">
@@ -216,7 +220,73 @@
           </div>
         </div>
       </div>
+
+      <!-- Naya story banao -->
+      <div id="storyCreateModal" class="contact-form-modal hidden">
+        <div class="contact-form-card story-create-card">
+          <div class="story-create-head">
+            <span>Nayi Story</span>
+            <button type="button" id="storyCreateClose" class="story-close-btn">✕</button>
+          </div>
+
+          <div class="story-type-tabs">
+            <button type="button" id="storyTypeMediaBtn" class="story-type-tab active">📷 Photo/Video</button>
+            <button type="button" id="storyTypeTextBtn" class="story-type-tab">Aa Text</button>
+          </div>
+
+          <!-- Photo/Video preview -->
+          <div id="storyMediaPane" class="story-media-pane">
+            <div id="storyMediaPreviewWrap" class="story-media-preview-wrap hidden">
+              <img id="storyImagePreview" class="story-media-preview hidden" alt="Story preview">
+              <video id="storyVideoPreview" class="story-media-preview hidden" muted controls></video>
+            </div>
+            <button type="button" id="storyPickMediaBtn" class="story-pick-media-btn">📁 Photo ya Video chuno</button>
+          </div>
+
+          <!-- Text story -->
+          <div id="storyTextPane" class="story-text-pane hidden">
+            <div id="storyTextPreview" class="story-text-preview" style="background:#25D366">
+              <textarea id="storyTextInput" placeholder="Kuch likho..." maxlength="200"></textarea>
+            </div>
+            <div id="storyColorSwatches" class="story-color-swatches"></div>
+          </div>
+
+          <input id="storyCaptionInput" type="text" placeholder="Caption (optional)" maxlength="150" class="story-caption-input">
+
+          <div class="story-music-row">
+            <label for="storyMusicSelect">🎵 Music (optional)</label>
+            <select id="storyMusicSelect"><option value="">Koi music nahi</option></select>
+          </div>
+
+          <div class="contact-form-actions">
+            <button type="button" id="storyCreateCancel">Cancel</button>
+            <button type="button" id="storyCreatePostBtn">Story lagao</button>
+          </div>
+        </div>
+      </div>
     </main>
+  </div>
+
+  <!-- Story viewer (full screen) -->
+  <div id="storyViewerOverlay" class="story-viewer-overlay hidden">
+    <div id="storyProgressBar" class="story-progress-bar"></div>
+    <div class="story-viewer-head">
+      <span id="storyViewerAvatar" class="story-viewer-avatar-wrap"></span>
+      <span id="storyViewerUsername" class="story-viewer-username"></span>
+      <span id="storyViewerTime" class="story-viewer-time"></span>
+      <button type="button" id="storyDeleteBtn" class="story-header-btn hidden" title="Story delete karo">🗑️</button>
+      <button type="button" id="storyViewerCloseBtn" class="story-header-btn">✕</button>
+    </div>
+    <div id="storyViewerBody" class="story-viewer-body">
+      <div id="storyViewerZonePrev" class="story-viewer-zone story-viewer-zone-prev"></div>
+      <div id="storyViewerZoneNext" class="story-viewer-zone story-viewer-zone-next"></div>
+      <img id="storyViewerImage" class="story-viewer-media hidden" alt="Story">
+      <video id="storyViewerVideo" class="story-viewer-media hidden" playsinline></video>
+      <div id="storyViewerTextSlide" class="story-viewer-text-slide hidden"></div>
+    </div>
+    <p id="storyViewerCaption" class="story-viewer-caption"></p>
+    <p id="storyViewerCount" class="story-viewer-count hidden"></p>
+    <audio id="storyViewerAudio" class="hidden"></audio>
   </div>
 
   <!-- Incoming call popup (WhatsApp-style full screen) -->

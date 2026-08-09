@@ -21,7 +21,7 @@ function requireAuth(req, res, next) {
 // permanent storage ke liye Cloudinary use kar rahe hain (DP + chat photos/files).
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB, same limit as frontend
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB (photos/docs/voice ke saath ab chhote story videos bhi)
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
@@ -37,7 +37,9 @@ const upload = multer({
     // Voice messages: browsers MediaRecorder mimetype "audio/webm", "audio/webm;codecs=opus",
     // "audio/ogg", "audio/mp4" waghera bhejte hain — isliye koi bhi "audio/*" allow kar diya.
     const isAudio = file.mimetype.startsWith('audio/');
-    if (allowedTypes.includes(file.mimetype) || isAudio) cb(null, true);
+    // Story video ke liye: koi bhi "video/*" allow (mp4, webm, mov waghera)
+    const isVideo = file.mimetype.startsWith('video/');
+    if (allowedTypes.includes(file.mimetype) || isAudio || isVideo) cb(null, true);
     else cb(new Error('Ye file type allowed nahi hai'));
   }
 });
@@ -66,6 +68,7 @@ router.post('/', requireAuth, (req, res) => {
     let type = 'document';
     if (req.file.mimetype.startsWith('image/')) type = 'image';
     else if (req.file.mimetype.startsWith('audio/')) type = 'audio';
+    else if (req.file.mimetype.startsWith('video/')) type = 'video';
 
     // Cloudinary "auto" resource_type khud dekh ke image/video/raw (pdf, doc, audio) tay kar leta hai.
     // Non-image files ke liuse asli filename raakhna zaroori hai (varna download pe naam kharab dikhega).

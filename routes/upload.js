@@ -1,8 +1,20 @@
 const express = require('express');
 const multer = require('multer');
 const cloudinary = require('../config/cloudinary');
+const { verifyToken } = require('./auth');
 
 const router = express.Router();
+
+// Sirf logged-in users hi file upload kar sakte hain (Authorization: Bearer <token> header chahiye).
+// Isse koi bhi anjaan banda seedha Cloudinary pe file/spam upload nahi kar sakta.
+function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.replace('Bearer ', '').trim();
+  const payload = verifyToken(token);
+  if (!payload) return res.status(401).json({ error: 'Login zaroori hai, session expire ho gaya hoga' });
+  req.userId = payload.userId;
+  next();
+}
 
 // Files disk pe save nahi hote — sirf RAM me hold hote hain, phir seedha Cloudinary
 // pe stream ho jaate hain. Render ka disk restart pe wipe ho jaata hai, isliye
@@ -42,7 +54,7 @@ function uploadBufferToCloudinary(buffer, options) {
   });
 }
 
-router.post('/', (req, res) => {
+router.post('/', requireAuth, (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err) {
       return res.status(400).json({ error: err.message || 'Upload fail hua' });

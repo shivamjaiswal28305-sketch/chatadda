@@ -9,8 +9,13 @@ const mongoose = require('mongoose');
 const User = require('./models/User');
 const Message = require('./models/Message');
 const PushSubscription = require('./models/PushSubscription');
+const Story = require('./models/Story');
+const Contact = require('./models/Contact');
 const { router: authRouter, verifyToken } = require('./routes/auth');
 const uploadRouter = require('./routes/upload');
+const storiesRouter = require('./routes/stories');
+const contactsRouter = require('./routes/contacts');
+const musicLibrary = require('./config/musicLibrary');
 const webpush = require('web-push');
 const rateLimit = require('express-rate-limit');
 
@@ -106,6 +111,8 @@ async function sendPushToUser(username, { title, body, url }) {
 // ---------- REST routes ----------
 app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/upload', uploadLimiter, uploadRouter);
+app.use('/api/stories', storiesRouter);
+app.use('/api/contacts', contactsRouter);
 
 // Har REST route ke liye login check karne wala helper — Authorization: Bearer <token> header chahiye
 function requireAuth(req, res, next) {
@@ -126,6 +133,11 @@ function isValidMediaUrl(url) {
   const pattern = new RegExp(`^https://res\\.cloudinary\\.com/${cloudName}/(image|video|raw)/upload/[a-zA-Z0-9/_.\\-]+$`);
   return pattern.test(url);
 }
+
+// Story banate waqt background music choose karne ke liye tracks ki list
+app.get('/api/music', requireAuth, (req, res) => {
+  res.json(musicLibrary);
+});
 
 // Client ko VAPID public key deta hai taaki wo pushManager.subscribe() kar sake
 app.get('/api/push/vapid-public-key', (req, res) => {

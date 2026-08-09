@@ -1588,3 +1588,23 @@ body.dark-mode .story-music-row select { background: #2a3942; color: #e9edef; bo
   cursor: pointer;
 }
 body.dark-mode .story-add-badge { border-color: #111b21; }
+
+/* ==================== HEADER SPACE FIX (mobile pe "last seen" poora dikhe) ==================== */
+/* Search/call/more icons ki padding-gap kam ki taaki naam+status ko zyada width mil sake */
+@media (max-width: 480px) {
+  .chat-header {
+    gap: 4px;
+    padding: 10px 8px;
+  }
+  .action-btn {
+    padding: 6px 4px;
+    font-size: 17px;
+  }
+  .chat-actions {
+    gap: 0;
+  }
+  .header-avatar {
+    width: 34px;
+    height: 34px;
+  }
+}

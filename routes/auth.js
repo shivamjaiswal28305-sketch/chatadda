@@ -5,7 +5,13 @@ const User = require('../models/User');
 
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'chatadda-dev-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  // Hardcoded fallback secret hona security risk hai (koi bhi fake login token bana sakta
+  // hai) — isliye ab agar Render pe JWT_SECRET env var missing hai to server start hi nahi hoga.
+  console.error('FATAL: JWT_SECRET env var set nahi hai. Render dashboard > Environment me JWT_SECRET add karo (koi bhi random 32+ character string).');
+  process.exit(1);
+}
 const JWT_EXPIRY = '30d';
 
 function makeToken(userId) {
@@ -33,8 +39,8 @@ router.post('/signup', async (req, res) => {
     if (!phone || phone.length < 8 || phone.length > 15) {
       return res.status(400).json({ error: 'Sahi phone number daalo' });
     }
-    if (!password || password.length < 4) {
-      return res.status(400).json({ error: 'Password kam se kam 4 characters ka hona chahiye' });
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password kam se kam 6 characters ka hona chahiye' });
     }
 
     // Phone number duplicate check

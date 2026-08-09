@@ -2,7 +2,11 @@
 // - Push notifications (jaisa pehle tha)
 // - PWA installability + basic offline caching (app shell)
 
-const CACHE_NAME = 'chatadda-cache-v1';
+// v1 -> v2: cache-first strategy ki wajah se naye deploy hone ke baad bhi purani
+// index.html/client.js/style.css dikhti rehti thi (update kabhi user tak pohochta hi
+// nahi tha). Ab NETWORK-FIRST hai — hamesha pehle naya version fetch karega, aur agar
+// internet na ho tabhi purani cached copy dikhayega (offline fallback).
+const CACHE_NAME = 'chatadda-cache-v2';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -34,11 +38,16 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
 
+  // NETWORK-FIRST: pehle hamesha internet se naya version maango. Mil jaye to cache bhi
+  // update kar do aur wahi dikhao. Sirf offline hone par (fetch fail) purani cache dikhao.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).catch(() => cached);
-    })
+    fetch(event.request)
+      .then((freshRes) => {
+        const resClone = freshRes.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, resClone));
+        return freshRes;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
 

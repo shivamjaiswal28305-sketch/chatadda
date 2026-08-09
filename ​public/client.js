@@ -285,7 +285,7 @@ function setMyAvatar(url) {
 
 async function loadAllUsersPresence() {
   try {
-    const res = await fetch('/api/users');
+    const res = await fetch('/api/users', { headers: { 'Authorization': `Bearer ${getToken()}` } });
     const list = await res.json();
     list.forEach((u) => {
       presenceMap[u.username] = { isOnline: u.isOnline, lastSeen: u.lastSeen, photoUrl: u.photoUrl || '' };
@@ -305,7 +305,11 @@ avatarFileInput.addEventListener('change', async () => {
   formData.append('file', file);
   showToast('DP upload ho raha hai...');
   try {
-    const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+    const uploadRes = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+      body: formData
+    });
     const uploadData = await uploadRes.json();
     if (!uploadRes.ok) { showToast(uploadData.error || 'Upload fail hua'); avatarFileInput.value = ''; return; }
 
@@ -511,7 +515,9 @@ if (getToken()) {
 // ==================== HISTORY LOADING ====================
 async function loadHistory(room) {
   try {
-    const res = await fetch(`/api/messages/${encodeURIComponent(room)}`);
+    const res = await fetch(`/api/messages/${encodeURIComponent(room)}`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
     const msgs = await res.json();
     if (room === 'public') {
       conversations.public = msgs.map(m => ({
@@ -593,7 +599,9 @@ async function switchToChat(target) {
     const room = [myUsername, target].sort().join('__');
     if (!conversations[target] || conversations[target]._loaded !== true) {
       try {
-        const res = await fetch(`/api/messages/${encodeURIComponent(room)}`);
+        const res = await fetch(`/api/messages/${encodeURIComponent(room)}`, {
+          headers: { 'Authorization': `Bearer ${getToken()}` }
+        });
         const msgs = await res.json();
         conversations[target] = msgs.map(m => ({
           _id: m._id, from: m.fromUsername, to: m.fromUsername === myUsername ? target : myUsername,
@@ -654,7 +662,9 @@ async function doPhoneSearch() {
   searchResult.classList.remove('hidden');
   searchResult.innerHTML = '<p class="search-status">Dhoondh rahe hain...</p>';
   try {
-    const res = await fetch(`/api/users/search?phone=${encodeURIComponent(phone)}`);
+    const res = await fetch(`/api/users/search?phone=${encodeURIComponent(phone)}`, {
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
     const data = await res.json();
     if (!res.ok) {
       searchResult.innerHTML = `<p class="search-not-found">${escapeHtml(data.error || 'Nahi mila')}</p>`;
@@ -714,14 +724,17 @@ function appendMessageToDOM(data) {
   if (data.deleted) {
     bodyHtml = `<span class="msg-text msg-deleted-text">🚫 Ye message delete kar diya gaya</span>`;
   } else if (data.type === 'image') {
-    bodyHtml = `<a href="${data.mediaUrl}" target="_blank"><img src="${data.mediaUrl}" class="msg-image" alt="image"></a>`;
+    const safeUrl = escapeHtml(data.mediaUrl);
+    bodyHtml = `<a href="${safeUrl}" target="_blank"><img src="${safeUrl}" class="msg-image" alt="image"></a>`;
   } else if (data.type === 'document') {
-    bodyHtml = `<a href="${data.mediaUrl}" target="_blank" class="msg-doc">📄 ${escapeHtml(data.mediaName || 'Document')}</a>`;
+    const safeUrl = escapeHtml(data.mediaUrl);
+    bodyHtml = `<a href="${safeUrl}" target="_blank" class="msg-doc">📄 ${escapeHtml(data.mediaName || 'Document')}</a>`;
   } else if (data.type === 'location' && data.location) {
-    const { lat, lng } = data.location;
+    const lat = Number(data.location.lat) || 0;
+    const lng = Number(data.location.lng) || 0;
     bodyHtml = `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" class="msg-location">📍 Location dekho</a>`;
   } else if (data.type === 'audio') {
-    bodyHtml = `<div class="msg-audio"><audio controls src="${data.mediaUrl}"></audio></div>`;
+    bodyHtml = `<div class="msg-audio"><audio controls src="${escapeHtml(data.mediaUrl)}"></audio></div>`;
   } else if (data.type === 'contact') {
     const phone = escapeHtml(data.contactPhone || '');
     bodyHtml = `
@@ -1346,7 +1359,11 @@ fileInput.addEventListener('change', async () => {
 
   showToast('Upload ho raha hai...');
   try {
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+      body: formData
+    });
     const data = await res.json();
     if (!res.ok) { showToast(data.error || 'Upload fail hua'); return; }
     sendMessage({ type: data.type, mediaUrl: data.url, mediaName: data.name });
@@ -1696,7 +1713,11 @@ editorSendBtn.addEventListener('click', () => {
     formData.append('file', blob, `photo-${Date.now()}.png`);
     showToast('Photo bhej rahe hain...');
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+        body: formData
+      });
       const data = await res.json();
       if (!res.ok) { showToast(data.error || 'Upload fail hua'); return; }
       sendMessage({ type: 'image', mediaUrl: data.url, mediaName: data.name });
@@ -1781,7 +1802,11 @@ async function uploadAndSendVoice(blob, duration) {
   formData.append('file', blob, `voice-${Date.now()}.webm`);
   showToast('Voice message bhej rahe hain...');
   try {
-    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${getToken()}` },
+      body: formData
+    });
     const data = await res.json();
     if (!res.ok) { showToast(data.error || 'Voice message bhejna fail hua'); return; }
     sendMessage({ type: 'audio', mediaUrl: data.url, mediaName: 'Voice message', duration });

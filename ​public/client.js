@@ -36,6 +36,44 @@ const savedContactsSection = document.getElementById('savedContactsSection');
 const savedContactsList = document.getElementById('savedContactsList');
 const myAvatarBtn = document.getElementById('myAvatarBtn');
 const avatarFileInput = document.getElementById('avatarFileInput');
+
+// Stories
+const storiesRing = document.getElementById('storiesRing');
+const storyFileInput = document.getElementById('storyFileInput');
+const storyCreateModal = document.getElementById('storyCreateModal');
+const storyCreateClose = document.getElementById('storyCreateClose');
+const storyCreateCancel = document.getElementById('storyCreateCancel');
+const storyCreatePostBtn = document.getElementById('storyCreatePostBtn');
+const storyTypeMediaBtn = document.getElementById('storyTypeMediaBtn');
+const storyTypeTextBtn = document.getElementById('storyTypeTextBtn');
+const storyMediaPane = document.getElementById('storyMediaPane');
+const storyTextPane = document.getElementById('storyTextPane');
+const storyMediaPreviewWrap = document.getElementById('storyMediaPreviewWrap');
+const storyImagePreview = document.getElementById('storyImagePreview');
+const storyVideoPreview = document.getElementById('storyVideoPreview');
+const storyPickMediaBtn = document.getElementById('storyPickMediaBtn');
+const storyTextPreview = document.getElementById('storyTextPreview');
+const storyTextInput = document.getElementById('storyTextInput');
+const storyColorSwatches = document.getElementById('storyColorSwatches');
+const storyCaptionInput = document.getElementById('storyCaptionInput');
+const storyMusicSelect = document.getElementById('storyMusicSelect');
+const storyViewerOverlay = document.getElementById('storyViewerOverlay');
+const storyProgressBar = document.getElementById('storyProgressBar');
+const storyViewerAvatar = document.getElementById('storyViewerAvatar');
+const storyViewerUsername = document.getElementById('storyViewerUsername');
+const storyViewerTime = document.getElementById('storyViewerTime');
+const storyDeleteBtn = document.getElementById('storyDeleteBtn');
+const storyViewerCloseBtn = document.getElementById('storyViewerCloseBtn');
+const storyViewerBody = document.getElementById('storyViewerBody');
+const storyViewerZonePrev = document.getElementById('storyViewerZonePrev');
+const storyViewerZoneNext = document.getElementById('storyViewerZoneNext');
+const storyViewerImage = document.getElementById('storyViewerImage');
+const storyViewerVideo = document.getElementById('storyViewerVideo');
+const storyViewerTextSlide = document.getElementById('storyViewerTextSlide');
+const storyViewerCaption = document.getElementById('storyViewerCaption');
+const storyViewerCount = document.getElementById('storyViewerCount');
+const storyViewerAudio = document.getElementById('storyViewerAudio');
+
 const headerAvatar = document.getElementById('headerAvatar');
 const headerSubtitle = document.getElementById('headerSubtitle');
 const micBtn = document.getElementById('micBtn');
@@ -165,7 +203,7 @@ themeToggleBtn.addEventListener('click', () => {
 });
 applyTheme();
 
-// ==================== SAVED CONTACTS (localStorage) ====================
+// ==================== SAVED CONTACTS (localStorage + server sync) ====================
 function getContacts() {
   return JSON.parse(localStorage.getItem('chatadda_contacts') || '[]');
 }
@@ -175,6 +213,7 @@ function saveContactLocal(username) {
   if (!list.includes(username)) {
     list.push(username);
     localStorage.setItem('chatadda_contacts', JSON.stringify(list));
+    syncContactToServer(username);
   }
   renderSavedContacts();
 }
@@ -182,6 +221,34 @@ function removeContactLocal(username) {
   const list = getContacts().filter((u) => u !== username);
   localStorage.setItem('chatadda_contacts', JSON.stringify(list));
   renderSavedContacts();
+  fetch(`/api/contacts/${encodeURIComponent(username)}`, {
+    method: 'DELETE',
+    headers: { 'Authorization': `Bearer ${getToken()}` }
+  }).catch(() => { /* ignore */ });
+}
+// Contacts ab server pe bhi save hote hain (taaki Stories dikhane ke liye server ko
+// pata ho kiske contacts mein kaun hai — aur bonus: phone/laptop dono pe sync ho jaate hain)
+async function syncContactToServer(username) {
+  try {
+    await fetch('/api/contacts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+      body: JSON.stringify({ username })
+    });
+  } catch (err) { /* local copy already saved, no biggie */ }
+}
+async function loadServerContacts() {
+  try {
+    const res = await fetch('/api/contacts', { headers: { 'Authorization': `Bearer ${getToken()}` } });
+    if (!res.ok) return;
+    const serverList = await res.json();
+    const localList = getContacts();
+    // Purane device pe agar koi contact sirf local mein hai (server pe nahi), use bhi push kar do
+    localList.forEach((u) => { if (!serverList.includes(u)) syncContactToServer(u); });
+    const merged = Array.from(new Set([...serverList, ...localList]));
+    localStorage.setItem('chatadda_contacts', JSON.stringify(merged));
+    renderSavedContacts();
+  } catch (err) { /* ignore */ }
 }
 function renderSavedContacts() {
   const list = getContacts();
@@ -213,7 +280,387 @@ function renderSavedContacts() {
   });
 }
 
-// ==================== MESSAGE EDIT / DELETE FOR EVERYONE (server-synced) ====================
+// ==================== STORIES (Instagram-style, 24hr auto-expire) ====================
+let myUserId = '';
+function decodeMyUserId() {
+  try {
+    const token = getToken();
+    if (!token) return '';
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(atob(payload));
+    return json.userId || '';
+  } catch (err) { return ''; }
+}
+
+let musicTracks = [];
+let storiesGrouped = {}; // username -> [story, ...] (oldest se newest)
+const STORY_COLORS = ['#25D366', '#7C3AED', '#F97316', '#0EA5A4', '#FB7185', '#2AABEE', '#111827', '#EF4444'];
+let selectedStoryColor = STORY_COLORS[0];
+let storyCreateMode = 'media'; // 'media' | 'text'
+let pendingStoryFile = null;
+let pendingStoryFileKind = null; // 'image' | 'video'
+
+function storyTimeAgo(dateStr) {
+  const diffMin = Math.max(0, Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000));
+  if (diffMin < 1) return 'abhi';
+  if (diffMin < 60) return `${diffMin}m`;
+  const diffHr = Math.floor(diffMin / 60);
+  return `${diffHr}h`;
+}
+
+async function loadMusicLibrary() {
+  try {
+    const res = await fetch('/api/music', { headers: { 'Authorization': `Bearer ${getToken()}` } });
+    if (!res.ok) return;
+    musicTracks = await res.json();
+    storyMusicSelect.innerHTML = '<option value="">Koi music nahi</option>' +
+      musicTracks.map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`).join('');
+  } catch (err) { /* ignore */ }
+}
+
+async function loadStories() {
+  try {
+    const res = await fetch('/api/stories', { headers: { 'Authorization': `Bearer ${getToken()}` } });
+    if (!res.ok) return;
+    const list = await res.json();
+    storiesGrouped = {};
+    list.forEach((s) => {
+      if (!storiesGrouped[s.fromUsername]) storiesGrouped[s.fromUsername] = [];
+      storiesGrouped[s.fromUsername].push(s);
+    });
+    renderStoriesRing();
+  } catch (err) { /* ignore */ }
+}
+
+function hasUnviewedStory(username) {
+  const stories = storiesGrouped[username] || [];
+  return stories.some((s) => !(s.viewedBy || []).includes(myUserId));
+}
+
+function renderStoriesRing() {
+  if (!storiesRing) return;
+  storiesRing.innerHTML = '';
+
+  // Apna avatar hamesha sabse pehle
+  const myStories = storiesGrouped[myUsername] || [];
+  const myBtn = document.createElement('button');
+  myBtn.className = 'story-avatar-btn';
+  const myCircleClass = myStories.length ? '' : 'add-new';
+  myBtn.innerHTML = `
+    <div class="story-ring-circle ${myCircleClass}">
+      ${myStories.length ? getAvatarHtml(myUsername) : '<span class="story-plus">+</span>'}
+      ${myStories.length ? '<span class="story-add-badge">+</span>' : ''}
+    </div>
+    <span class="story-avatar-label">${myStories.length ? 'Aapki Story' : 'Add Story'}</span>
+  `;
+  myBtn.addEventListener('click', () => {
+    if (myStories.length) openStoryViewer(myUsername);
+    else openStoryCreateModal();
+  });
+  if (myStories.length) {
+    const badge = myBtn.querySelector('.story-add-badge');
+    if (badge) {
+      badge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openStoryCreateModal();
+      });
+    }
+  }
+  storiesRing.appendChild(myBtn);
+
+  // Baaki (saved contacts jinki story hai)
+  Object.keys(storiesGrouped)
+    .filter((u) => u !== myUsername)
+    .forEach((username) => {
+      const btn = document.createElement('button');
+      btn.className = 'story-avatar-btn';
+      const circleClass = hasUnviewedStory(username) ? '' : 'viewed';
+      btn.innerHTML = `
+        <div class="story-ring-circle ${circleClass}">${getAvatarHtml(username)}</div>
+        <span class="story-avatar-label">${escapeHtml(username)}</span>
+      `;
+      btn.addEventListener('click', () => openStoryViewer(username));
+      storiesRing.appendChild(btn);
+    });
+}
+
+// ---------- Story banane ka modal ----------
+function buildStoryColorSwatches() {
+  storyColorSwatches.innerHTML = STORY_COLORS.map((c) =>
+    `<button type="button" class="story-swatch${c === selectedStoryColor ? ' selected' : ''}" data-color="${c}" style="background:${c}"></button>`
+  ).join('');
+  storyColorSwatches.querySelectorAll('.story-swatch').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      selectedStoryColor = btn.dataset.color;
+      storyTextPreview.style.background = selectedStoryColor;
+      storyColorSwatches.querySelectorAll('.story-swatch').forEach((b) => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+  });
+}
+
+function resetStoryCreateModal() {
+  pendingStoryFile = null;
+  pendingStoryFileKind = null;
+  storyFileInput.value = '';
+  storyImagePreview.classList.add('hidden');
+  storyVideoPreview.classList.add('hidden');
+  storyVideoPreview.pause();
+  storyMediaPreviewWrap.classList.add('hidden');
+  storyPickMediaBtn.classList.remove('hidden');
+  storyTextInput.value = '';
+  storyCaptionInput.value = '';
+  storyMusicSelect.value = '';
+  selectedStoryColor = STORY_COLORS[0];
+  storyTextPreview.style.background = selectedStoryColor;
+  buildStoryColorSwatches();
+  setStoryCreateMode('media');
+}
+
+function setStoryCreateMode(mode) {
+  storyCreateMode = mode;
+  storyTypeMediaBtn.classList.toggle('active', mode === 'media');
+  storyTypeTextBtn.classList.toggle('active', mode === 'text');
+  storyMediaPane.classList.toggle('hidden', mode !== 'media');
+  storyTextPane.classList.toggle('hidden', mode !== 'text');
+}
+
+function openStoryCreateModal() {
+  resetStoryCreateModal();
+  if (!musicTracks.length) loadMusicLibrary();
+  storyCreateModal.classList.remove('hidden');
+}
+function closeStoryCreateModal() {
+  storyCreateModal.classList.add('hidden');
+}
+
+storyTypeMediaBtn.addEventListener('click', () => setStoryCreateMode('media'));
+storyTypeTextBtn.addEventListener('click', () => setStoryCreateMode('text'));
+storyCreateClose.addEventListener('click', closeStoryCreateModal);
+storyCreateCancel.addEventListener('click', closeStoryCreateModal);
+
+storyPickMediaBtn.addEventListener('click', () => storyFileInput.click());
+storyFileInput.addEventListener('change', () => {
+  const file = storyFileInput.files[0];
+  if (!file) return;
+  if (file.size > 30 * 1024 * 1024) {
+    showToast('File 30MB se badi nahi honi chahiye');
+    storyFileInput.value = '';
+    return;
+  }
+  const isVideo = file.type.startsWith('video/');
+  pendingStoryFile = file;
+  pendingStoryFileKind = isVideo ? 'video' : 'image';
+
+  const url = URL.createObjectURL(file);
+  storyImagePreview.classList.toggle('hidden', isVideo);
+  storyVideoPreview.classList.toggle('hidden', !isVideo);
+  if (isVideo) { storyVideoPreview.src = url; } else { storyImagePreview.src = url; }
+  storyMediaPreviewWrap.classList.remove('hidden');
+  storyPickMediaBtn.classList.add('hidden');
+});
+
+storyCreatePostBtn.addEventListener('click', async () => {
+  try {
+    let mediaUrl = '';
+    let type = 'text';
+
+    if (storyCreateMode === 'media') {
+      if (!pendingStoryFile) { showToast('Pehle photo ya video chuno'); return; }
+      type = pendingStoryFileKind;
+      storyCreatePostBtn.disabled = true;
+      showToast('Story upload ho rahi hai...');
+      const formData = new FormData();
+      formData.append('file', pendingStoryFile);
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+        body: formData
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok) { showToast(uploadData.error || 'Upload fail hua'); storyCreatePostBtn.disabled = false; return; }
+      mediaUrl = uploadData.url;
+    } else {
+      const text = storyTextInput.value.trim();
+      if (!text) { showToast('Kuch to likho'); return; }
+      storyCreatePostBtn.disabled = true;
+    }
+
+    const body = {
+      type,
+      mediaUrl,
+      textContent: storyCreateMode === 'text' ? storyTextInput.value.trim() : storyCaptionInput.value.trim(),
+      backgroundColor: selectedStoryColor,
+      musicTrackId: storyMusicSelect.value || ''
+    };
+
+    const res = await fetch('/api/stories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    storyCreatePostBtn.disabled = false;
+    if (!res.ok) { showToast(data.error || 'Story lagana fail hua'); return; }
+
+    showToast('Story lag gayi! 🎉');
+    closeStoryCreateModal();
+    loadStories();
+  } catch (err) {
+    storyCreatePostBtn.disabled = false;
+    showToast('Story lagana fail hua');
+  }
+});
+
+// ---------- Story viewer (full screen) ----------
+let viewerStories = [];
+let viewerIndex = 0;
+let viewerTimeoutId = null;
+const STORY_SLIDE_DURATION = 5000; // photo/text ke liye 5 second
+
+function openStoryViewer(username) {
+  viewerStories = storiesGrouped[username] || [];
+  if (!viewerStories.length) return;
+  viewerIndex = 0;
+  storyViewerOverlay.classList.remove('hidden');
+  storyProgressBar.innerHTML = viewerStories.map(() => '<div class="seg"><div class="fill"></div></div>').join('');
+  showStorySlide();
+}
+
+function closeStoryViewer() {
+  clearTimeout(viewerTimeoutId);
+  storyViewerVideo.pause();
+  storyViewerAudio.pause();
+  storyViewerOverlay.classList.add('hidden');
+  loadStories(); // ring ka "viewed" state refresh karo
+}
+
+function showStorySlide() {
+  clearTimeout(viewerTimeoutId);
+  storyViewerAudio.pause();
+  storyViewerAudio.removeAttribute('src');
+  storyViewerVideo.onended = null;
+  storyViewerVideo.onloadedmetadata = null;
+
+  const story = viewerStories[viewerIndex];
+  if (!story) { closeStoryViewer(); return; }
+
+  const segs = storyProgressBar.querySelectorAll('.seg');
+  segs.forEach((seg, i) => {
+    const fill = seg.querySelector('.fill');
+    fill.style.transition = 'none';
+    fill.style.width = i < viewerIndex ? '100%' : '0%';
+    seg.classList.toggle('done', i < viewerIndex);
+  });
+
+  storyViewerAvatar.innerHTML = getAvatarHtml(story.fromUsername);
+  storyViewerUsername.textContent = story.fromUsername;
+  storyViewerTime.textContent = storyTimeAgo(story.createdAt);
+  storyDeleteBtn.classList.toggle('hidden', story.fromUsername !== myUsername);
+  storyViewerCaption.textContent = story.type !== 'text' ? (story.textContent || '') : '';
+
+  storyViewerImage.classList.add('hidden');
+  storyViewerVideo.classList.add('hidden');
+  storyViewerVideo.pause();
+  storyViewerTextSlide.classList.add('hidden');
+
+  const myOwnStory = story.fromUsername === myUsername;
+  storyViewerCount.classList.toggle('hidden', !myOwnStory);
+  if (myOwnStory) {
+    const viewCount = (story.viewedBy || []).length;
+    storyViewerCount.textContent = `👁️ ${viewCount} views`;
+  }
+
+  if (story.type === 'image') {
+    storyViewerImage.src = story.mediaUrl;
+    storyViewerImage.classList.remove('hidden');
+  } else if (story.type === 'video') {
+    storyViewerVideo.src = story.mediaUrl;
+    storyViewerVideo.classList.remove('hidden');
+    storyViewerVideo.currentTime = 0;
+    storyViewerVideo.play().catch(() => {});
+  } else {
+    storyViewerTextSlide.textContent = story.textContent;
+    storyViewerTextSlide.style.background = story.backgroundColor || '#25D366';
+    storyViewerTextSlide.classList.remove('hidden');
+  }
+
+  if (story.musicTrackId) {
+    const track = musicTracks.find((t) => t.id === story.musicTrackId);
+    if (track) {
+      storyViewerAudio.src = track.url;
+      storyViewerAudio.play().catch(() => {});
+    }
+  }
+
+  markStoryViewed(story._id);
+
+  const fill = segs[viewerIndex] ? segs[viewerIndex].querySelector('.fill') : null;
+  if (story.type === 'video') {
+    storyViewerVideo.onended = () => nextStorySlide();
+    storyViewerVideo.onloadedmetadata = () => {
+      if (!fill) return;
+      fill.style.transition = `width ${storyViewerVideo.duration}s linear`;
+      requestAnimationFrame(() => { fill.style.width = '100%'; });
+    };
+  } else if (fill) {
+    fill.style.transition = `width ${STORY_SLIDE_DURATION / 1000}s linear`;
+    requestAnimationFrame(() => { fill.style.width = '100%'; });
+    viewerTimeoutId = setTimeout(nextStorySlide, STORY_SLIDE_DURATION);
+  }
+}
+
+function nextStorySlide() {
+  viewerIndex++;
+  if (viewerIndex >= viewerStories.length) { closeStoryViewer(); return; }
+  showStorySlide();
+}
+function prevStorySlide() {
+  viewerIndex = Math.max(0, viewerIndex - 1);
+  showStorySlide();
+}
+
+async function markStoryViewed(storyId) {
+  try {
+    await fetch(`/api/stories/${storyId}/view`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    const story = viewerStories.find((s) => s._id === storyId);
+    if (story && myUserId && !(story.viewedBy || []).includes(myUserId)) {
+      story.viewedBy = [...(story.viewedBy || []), myUserId];
+    }
+  } catch (err) { /* ignore */ }
+}
+
+storyViewerZonePrev.addEventListener('click', prevStorySlide);
+storyViewerZoneNext.addEventListener('click', nextStorySlide);
+storyViewerCloseBtn.addEventListener('click', closeStoryViewer);
+
+storyDeleteBtn.addEventListener('click', async () => {
+  const story = viewerStories[viewerIndex];
+  if (!story) return;
+  if (!confirm('Ye story delete karni hai?')) return;
+  try {
+    await fetch(`/api/stories/${story._id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${getToken()}` }
+    });
+    showToast('Story delete ho gayi');
+    viewerStories.splice(viewerIndex, 1);
+    if (!viewerStories.length) {
+      closeStoryViewer();
+    } else {
+      if (viewerIndex >= viewerStories.length) viewerIndex = viewerStories.length - 1;
+      storyProgressBar.innerHTML = viewerStories.map(() => '<div class="seg"><div class="fill"></div></div>').join('');
+      showStorySlide();
+    }
+  } catch (err) {
+    showToast('Delete fail hua');
+  }
+});
+
+
 function deleteMessageEveryone(data) {
   if (!data._id) { showToast('Ye purana message delete nahi ho sakta'); return; }
   if (!confirm('Ye message SABKE liye delete karna hai?')) return;
@@ -488,11 +935,15 @@ socket.on('disconnect', () => {
 // ---- Login/signup hone ke baad: SILENT — koi bhi turant "online" nahi dikhta ----
 socket.on('joined', (finalName) => {
   myUsername = finalName;
+  myUserId = decodeMyUserId();
   joinScreen.classList.add('hidden');
   chatScreen.classList.remove('hidden');
   showEmptyState();
   renderSavedContacts();
   loadAllUsersPresence();
+  loadServerContacts();
+  loadStories();
+  loadMusicLibrary();
   initPushNotifications();
 });
 
@@ -2202,122 +2653,4 @@ function openCallUI() {
   }, 1000);
 }
 
-function endCall(notifyServer = true) {
-  if (notifyServer && currentCallWith) socket.emit('callEnd', { toUsername: currentCallWith });
-  cleanupCall();
-}
-
-function cleanupCall() {
-  clearTimeout(ringTimeout);
-  clearTimeout(disconnectGraceTimeout);
-  if (peerConnection) { peerConnection.close(); peerConnection = null; }
-  stopFilterProcessing();
-  if (rawLocalStream) { rawLocalStream.getTracks().forEach((t) => t.stop()); rawLocalStream = null; }
-  localStream = null;
-  remoteVideo.srcObject = null;
-  localVideo.srcObject = null;
-  activeCallOverlay.classList.add('hidden');
-  incomingCallModal.classList.add('hidden');
-  clearInterval(callTimerInterval);
-  callTimerInterval = null;
-  currentCallWith = null;
-  currentCallType = null;
-  callConnected = false;
-  micOn = true;
-  camOn = true;
-  currentFilter = 'none';
-  filterBar.querySelectorAll('.filter-btn').forEach((b) => b.classList.remove('active'));
-  filterBar.querySelector('[data-filter="none"]').classList.add('active');
-  toggleMicBtn.textContent = '🎤';
-  toggleMicBtn.classList.remove('muted');
-  toggleCamBtn.textContent = '📹';
-  toggleCamBtn.classList.remove('muted');
-}
-
-switchCallTypeBtn.addEventListener('click', async () => {
-  if (!peerConnection || !currentCallWith) return;
-  const goingToVideo = currentCallType !== 'video';
-
-  try {
-    if (goingToVideo) {
-      const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const videoTrack = camStream.getVideoTracks()[0];
-      rawLocalStream = rawLocalStream || camStream;
-      if (!rawLocalStream.getVideoTracks().length) {
-        rawLocalStream.addTrack(videoTrack);
-      }
-      const sender = peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
-      if (sender) sender.replaceTrack(videoTrack);
-      else peerConnection.addTrack(videoTrack, rawLocalStream);
-      localStream = rawLocalStream;
-      currentCallType = 'video';
-    } else {
-      const videoSender = peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
-      if (videoSender && videoSender.track) videoSender.track.stop();
-      if (videoSender) peerConnection.removeTrack(videoSender);
-      currentCallType = 'audio';
-    }
-
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    socket.emit('callTypeSwitch', { toUsername: currentCallWith, offer, newType: currentCallType });
-    updateCallTypeUI();
-  } catch (err) {
-    showToast('Camera switch nahi ho paya. Permission check karo.');
-  }
-});
-
-socket.on('callTypeSwitch', async ({ fromUsername, offer, newType }) => {
-  if (!peerConnection || currentCallWith !== fromUsername) return;
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-  const answer = await peerConnection.createAnswer();
-  await peerConnection.setLocalDescription(answer);
-  socket.emit('callTypeSwitchAnswer', { toUsername: fromUsername, answer });
-  currentCallType = newType;
-  updateCallTypeUI();
-});
-
-socket.on('callTypeSwitchAnswer', async ({ answer }) => {
-  if (!peerConnection) return;
-  await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-});
-
-endCallBtn.addEventListener('click', () => endCall(true));
-toggleMicBtn.addEventListener('click', () => {
-  if (!rawLocalStream) return;
-  micOn = !micOn;
-  rawLocalStream.getAudioTracks().forEach((t) => (t.enabled = micOn));
-  toggleMicBtn.textContent = micOn ? '🎤' : '🔇';
-  toggleMicBtn.classList.toggle('muted', !micOn);
-});
-toggleCamBtn.addEventListener('click', () => {
-  if (currentCallType !== 'video') return;
-  camOn = !camOn;
-  toggleCamBtn.textContent = camOn ? '📹' : '🚫';
-  toggleCamBtn.classList.toggle('muted', !camOn);
-});
-
-updateCallButtonsVisibility();
-
-// FIX: mobile browsers (khaaskar Android) mein 100dvh keyboard khulne/band hone par
-// sahi se recalculate nahi hota, jisse header kabhi-kabhi viewport se bahar chala jaata hai
-// ya poora layout gadbad dikhta hai. Yahan hum real visualViewport height nikal ke
-// ek CSS variable (--app-height) mein set karte hain, jise style.css mein screen/body
-// ki height ke liye use kiya gaya hai — ye 100dvh se zyada reliable hai.
-function setAppHeight() {
-  const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  document.documentElement.style.setProperty('--app-height', `${h}px`);
-  window.scrollTo(0, 0);
-  document.documentElement.scrollTop = 0;
-  document.body.scrollTop = 0;
-}
-setAppHeight();
-window.addEventListener('resize', setAppHeight);
-window.addEventListener('orientationchange', setAppHeight);
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', setAppHeight);
-  window.visualViewport.addEventListener('scroll', setAppHeight);
-}
-// Input pe focus/blur hone par (keyboard khulna/band hona) bhi turant recalculate karo
-messageInput.addEventListener('focus', () => setTimeout(setAppHeight, 100));
-messageInput.addEventListener('blur', () => setTimeout(setAppHeight, 100));
+function endCal

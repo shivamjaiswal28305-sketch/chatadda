@@ -20,6 +20,10 @@ const webpush = require('web-push');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+// Render (aur zyadatar hosting) ek reverse proxy ke peeche app chalata hai. Iske bina
+// express-rate-limit sabko ek hi "IP" samajh sakta hai (saare users milke rate-limit
+// hit kar sakte hain) — "1" matlab pehle proxy hop ko trust karo (Render ka apna proxy).
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 const io = new Server(server);
 

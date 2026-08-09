@@ -12,12 +12,31 @@ const PushSubscription = require('./models/PushSubscription');
 const { router: authRouter, verifyToken } = require('./routes/auth');
 const uploadRouter = require('./routes/upload');
 const webpush = require('web-push');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.json());
+
+// ---------- Rate limiting (brute-force / abuse se bachne ke liye) ----------
+// Login/signup: ek IP se 15 minute me 20 try se zyada nahi (bots ko password guess karne se rokta hai)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bahut zyada try ho gaye, thodi der baad phir try karo' }
+});
+// Upload: ek IP se 15 minute me 60 uploads se zyada nahi (Cloudinary abuse/spam se bachne ke liye)
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Bahut zyada uploads ho gaye, thodi der baad phir try karo' }
+});
 
 // Public folder ko dhoondo, chahe uske naam me koi invisible character ho
 const publicDirName = fs.readdirSync(__dirname, { withFileTypes: true })
@@ -85,8 +104,28 @@ async function sendPushToUser(username, { title, body, url }) {
 }
 
 // ---------- REST routes ----------
-app.use('/api/auth', authRouter);
-app.use('/api/upload', uploadRouter);
+app.use('/api/auth', authLimiter, authRouter);
+app.use('/api/upload', uploadLimiter, uploadRouter);
+
+// Har REST route ke liye login check karne wala helper — Authorization: Bearer <token> header chahiye
+function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.replace('Bearer ', '').trim();
+  const payload = verifyToken(token);
+  if (!payload) return res.status(401).json({ error: 'Login zaroori hai, session expire ho gaya hoga' });
+  req.userId = payload.userId;
+  next();
+}
+
+// Cloudinary URL hai ya nahi check karta hai (image/video/raw sab resource types allow) —
+// isse client se aaya galat/khatarnak mediaUrl DB me save hone se pehle reject ho jaata hai.
+function isValidMediaUrl(url) {
+  if (!url) return true; // koi media nahi bheja, valid hai
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME || '';
+  if (!cloudName) return false;
+  const pattern = new RegExp(`^https://res\\.cloudinary\\.com/${cloudName}/(image|video|raw)/upload/[a-zA-Z0-9/_.\\-]+$`);
+  return pattern.test(url);
+}
 
 // Client ko VAPID public key deta hai taaki wo pushManager.subscribe() kar sake
 app.get('/api/push/vapid-public-key', (req, res) => {
@@ -123,9 +162,22 @@ app.post('/api/push/unsubscribe', async (req, res) => {
 });
 
 // Chat history: last 50 messages of a room (public or a private pair-id)
-app.get('/api/messages/:room', async (req, res) => {
+// Login zaroori hai, aur agar private room hai to sirf uske dono participants hi padh sakte hain
+// (warna koi bhi dusre logon ke usernames jodke unki private chat padh sakta tha).
+app.get('/api/messages/:room', requireAuth, async (req, res) => {
   try {
-    const messages = await Message.find({ room: req.params.room })
+    const room = req.params.room;
+
+    if (room !== 'public') {
+      const me = await User.findById(req.userId, 'username').lean();
+      if (!me) return res.status(401).json({ error: 'User nahi mila' });
+      const participants = room.split('__');
+      if (!participants.includes(me.username)) {
+        return res.status(403).json({ error: 'Ye chat aapki nahi hai' });
+      }
+    }
+
+    const messages = await Message.find({ room })
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
@@ -135,8 +187,8 @@ app.get('/api/messages/:room', async (req, res) => {
   }
 });
 
-// All registered users (for contacts/search + profile photo/last seen cache)
-app.get('/api/users', async (req, res) => {
+// All registered users (for contacts/search + profile photo/last seen cache) — login zaroori hai
+app.get('/api/users', requireAuth, async (req, res) => {
   try {
     const users = await User.find({}, 'username isOnline lastSeen photoUrl').lean();
     res.json(users);
@@ -145,8 +197,9 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// Phone number se exact user search — sirf username+photo return karta hai, phone kabhi expose nahi hota
-app.get('/api/users/search', async (req, res) => {
+// Phone number se exact user search — sirf username+photo return karta hai, phone kabhi expose nahi hota.
+// Login zaroori hai, taaki koi anjaan bot sab phone numbers try-try ke registered users pata na laga sake.
+app.get('/api/users/search', requireAuth, async (req, res) => {
   try {
     const phone = String(req.query.phone || '').trim();
     if (!phone) return res.status(400).json({ error: 'Phone number do' });
@@ -315,6 +368,11 @@ io.on('connection', (socket) => {
     const type = ALLOWED_MSG_TYPES.includes(data.type) ? data.type : 'text';
     const text = type === 'text' ? cleanMessage(String(data.text || '').slice(0, 500)) : '';
 
+    // mediaUrl sirf humare apne Cloudinary account se aayi honi chahiye — warna client
+    // koi bhi khatarnak/galat URL bhej sakta tha jo baad me doosre users ke browser pe
+    // bina saaf kiye render ho jaata (XSS risk).
+    if (['image', 'document', 'audio'].includes(type) && !isValidMediaUrl(data.mediaUrl)) return;
+
     const replyTo = sanitizeReplyTo(data.replyTo);
     const forwarded = !!data.forwarded;
 
@@ -362,6 +420,7 @@ io.on('connection', (socket) => {
     if (!targetUser) return;
 
     const msgType = ALLOWED_MSG_TYPES.includes(type) ? type : 'text';
+    if (['image', 'document', 'audio'].includes(msgType) && !isValidMediaUrl(mediaUrl)) return;
     const cleanText = msgType === 'text' ? cleanMessage(String(text || '').slice(0, 500)) : '';
     const room = privateRoomId(socket.username, toUsername);
     const safeReplyTo = sanitizeReplyTo(replyTo);
@@ -466,6 +525,8 @@ io.on('connection', (socket) => {
     try {
       const msg = await Message.findById(messageId);
       if (!msg || msg.deleted) return;
+      // Private chat ke message pe sirf uske dono participants hi react kar sakte hain
+      if (msg.room !== 'public' && !msg.room.split('__').includes(socket.username)) return;
 
       const existingIndex = msg.reactions.findIndex(r => r.username === socket.username);
       if (existingIndex !== -1 && msg.reactions[existingIndex].emoji === emoji) {
@@ -494,6 +555,8 @@ io.on('connection', (socket) => {
     try {
       const msg = await Message.findById(messageId);
       if (!msg || msg.deleted) return;
+      // Private chat ke message pe sirf uske dono participants hi pin kar sakte hain
+      if (msg.room !== 'public' && !msg.room.split('__').includes(socket.username)) return;
 
       // Ek room me ek time pe ek hi pinned message rahega (WhatsApp jaisa simple behaviour)
       await Message.updateMany({ room: msg.room, pinned: true }, { pinned: false });
@@ -515,6 +578,8 @@ io.on('connection', (socket) => {
     try {
       const msg = await Message.findById(messageId);
       if (!msg) return;
+      // Private chat ke message pe sirf uske dono participants hi unpin kar sakte hain
+      if (msg.room !== 'public' && !msg.room.split('__').includes(socket.username)) return;
       msg.pinned = false;
       await msg.save();
       broadcastToRoom(msg.room || room, 'messageUnpinned', { room: msg.room || room });

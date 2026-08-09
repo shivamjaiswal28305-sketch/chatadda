@@ -34,7 +34,6 @@ app.use(express.static(path.join(__dirname, publicDirName), {
     }
   }
 }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ---------- MongoDB connect ----------
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chatadda';
@@ -172,10 +171,14 @@ app.post('/api/users/photo', async (req, res) => {
     const { photoUrl } = req.body;
     if (!photoUrl) return res.status(400).json({ error: 'Photo URL do' });
 
-    // Sirf apne /uploads/ route se aayi hui file allow karo — koi bhi arbitrary
-    // string (jisme HTML/quotes ho sakte hain) accept nahi karni, warna baad me
-    // frontend pe render hote waqt XSS ban sakti hai.
-    if (!/^\/uploads\/[a-zA-Z0-9._-]+$/.test(photoUrl)) {
+    // Sirf apne Cloudinary account se aayi hui secure image URL allow karo — koi bhi
+    // arbitrary string (jisme HTML/quotes ho sakte hain) accept nahi karni, warna baad
+    // me frontend pe render hote waqt XSS ban sakti hai.
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || '';
+    const cloudinaryPattern = new RegExp(
+      `^https://res\\.cloudinary\\.com/${cloudName}/image/upload/[a-zA-Z0-9/_.\\-]+$`
+    );
+    if (!cloudName || !cloudinaryPattern.test(photoUrl)) {
       return res.status(400).json({ error: 'Invalid photo URL' });
     }
 

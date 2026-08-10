@@ -2651,6 +2651,7 @@ function openCallUI() {
     const secs = String(callSeconds % 60).padStart(2, '0');
     callTimer.textContent = `${mins}:${secs}`;
   }, 1000);
+  } 
 function endCall(notifyOther) {
   if (notifyOther && currentCallWith) {
     socket.emit('callEnd', { toUsername: currentCallWith });

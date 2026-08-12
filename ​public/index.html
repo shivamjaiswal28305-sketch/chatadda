@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="/logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -312,6 +312,9 @@
 
   <!-- Active call overlay (WhatsApp-style) -->
   <div id="activeCallOverlay" class="call-overlay hidden">
+    <!-- Alag audio element — video-grid hidden hone par (audio call ke waqt) bhi awaaz chalti rahe,
+         kyunki kai mobile browsers display:none wale <video> ka playback/audio rok dete hain. -->
+    <audio id="remoteAudio" autoplay playsinline></audio>
     <div class="video-grid" id="videoGrid">
       <video id="remoteVideo" autoplay playsinline></video>
       <video id="localVideo" autoplay playsinline muted></video>
@@ -394,6 +397,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js?v=5"></script>
+  <script src="client.js?v=7"></script>
 </body>
 </html>

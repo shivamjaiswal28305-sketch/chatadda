@@ -683,22 +683,34 @@ io.on('connection', (socket) => {
   // ---------- DISCONNECT ----------
   socket.on('disconnect', async () => {
     if (socket.username) {
+      const disconnectedUsername = socket.username;
+      const disconnectedUserId = socket.userId;
       const wasInPublic = onlineUsers[socket.id]?.inPublicRoom;
       delete onlineUsers[socket.id];
 
       if (wasInPublic) {
-        io.emit('system', `${socket.username} chale gaye`);
+        io.emit('system', `${disconnectedUsername} chale gaye`);
         io.emit('userList', publicRoomUsernames());
       }
-      io.emit('callEnd', { fromUsername: socket.username });
+
+      // FIX: pehle turant 'callEnd' bhej dete the — jisse app background jaate hi ya
+      // network ka chhota sa blip aate hi doosre taraf ki active call turant kat jaati thi.
+      // Ab thoda ruko: agar user (koi bhi tab/device se) 10 second ke andar reconnect ho
+      // jaaye to call jaari rahegi, warna tabhi 'callEnd' bhejo.
+      setTimeout(() => {
+        const stillOnline = Object.values(onlineUsers).some((u) => u.username === disconnectedUsername);
+        if (!stillOnline) {
+          io.emit('callEnd', { fromUsername: disconnectedUsername });
+        }
+      }, 10000);
 
       const seenAt = new Date();
       try {
-        await User.findByIdAndUpdate(socket.userId, { isOnline: false, lastSeen: seenAt });
+        await User.findByIdAndUpdate(disconnectedUserId, { isOnline: false, lastSeen: seenAt });
       } catch (e) { /* ignore */ }
 
       // Global presence: sabko "Last seen" turant update dikhao
-      io.emit('presenceUpdate', { username: socket.username, isOnline: false, lastSeen: seenAt });
+      io.emit('presenceUpdate', { username: disconnectedUsername, isOnline: false, lastSeen: seenAt });
     }
   });
 });

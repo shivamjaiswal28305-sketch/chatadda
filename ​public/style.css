@@ -444,6 +444,9 @@ body.dark-mode .attach-menu-item:hover { background: #182229; }
   display: flex; flex-direction: column;
 }
 .call-overlay.hidden { display: none; }
+/* remoteAudio ko display:none NAHI karte — kai mobile browsers display:none wale media
+   element ka playback rok dete hain. Isliye sirf visually invisible/0-size rakha hai. */
+#remoteAudio { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 .call-top {
   position: absolute; top: 0; left: 0; right: 0; z-index: 3;

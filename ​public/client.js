@@ -2390,6 +2390,7 @@ const acceptCallBtn = document.getElementById('acceptCallBtn');
 const rejectCallBtn = document.getElementById('rejectCallBtn');
 const activeCallOverlay = document.getElementById('activeCallOverlay');
 const remoteVideo = document.getElementById('remoteVideo');
+const remoteAudio = document.getElementById('remoteAudio');
 const localVideo = document.getElementById('localVideo');
 const videoGrid = document.getElementById('videoGrid');
 const audioCallVisual = document.getElementById('audioCallVisual');
@@ -2434,6 +2435,101 @@ let camOn = true;
 let callConnected = false;
 let ringTimeout = null;
 let disconnectGraceTimeout = null;
+
+// ==================== RINGTONE (ringback jab call ki jaa rahi hai, ring jab call aa rahi hai) ====================
+// Koi audio file ki zaroorat nahi — Web Audio API se hi beep tones generate karte hain.
+let ringAudioCtx = null;
+let ringIntervalId = null;
+let ringVibrateIntervalId = null;
+
+function playTone(ctx, freq, startTime, duration, volume) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(volume, startTime + 0.02);
+  gain.gain.setValueAtTime(volume, Math.max(startTime + 0.02, startTime + duration - 0.05));
+  gain.gain.linearRampToValueAtTime(0, startTime + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(startTime);
+  osc.stop(startTime + duration);
+}
+
+function getRingCtx() {
+  if (!ringAudioCtx || ringAudioCtx.state === 'closed') {
+    ringAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (ringAudioCtx.state === 'suspended') ringAudioCtx.resume().catch(() => {});
+  return ringAudioCtx;
+}
+
+// Caller ke phone pe bajta hai jab tak doosra taraf call receive na kare
+function startRingback() {
+  stopRingtone();
+  try {
+    const ctx = getRingCtx();
+    const playPattern = () => {
+      const t = ctx.currentTime;
+      playTone(ctx, 480, t, 1.0, 0.15);
+      playTone(ctx, 440, t + 1.0, 1.0, 0.15);
+    };
+    playPattern();
+    ringIntervalId = setInterval(playPattern, 3000);
+  } catch (err) { /* AudioContext blocked — chalta hai, sirf ringtone miss hogi */ }
+}
+
+// Receiver ke phone pe bajti hai jab call aa rahi hai (ring + vibration, jab tak accept/reject na ho)
+function startIncomingRing() {
+  stopRingtone();
+  try {
+    const ctx = getRingCtx();
+    const playPattern = () => {
+      const t = ctx.currentTime;
+      playTone(ctx, 900, t, 0.35, 0.35);
+      playTone(ctx, 700, t + 0.4, 0.35, 0.35);
+    };
+    playPattern();
+    ringIntervalId = setInterval(playPattern, 1500);
+  } catch (err) { /* AudioContext blocked — chalta hai, vibration se pata chal jaayega */ }
+
+  if (navigator.vibrate) {
+    const pattern = [500, 300, 500, 800];
+    navigator.vibrate(pattern);
+    ringVibrateIntervalId = setInterval(() => navigator.vibrate(pattern), 2100);
+  }
+}
+
+function stopRingtone() {
+  if (ringIntervalId) { clearInterval(ringIntervalId); ringIntervalId = null; }
+  if (ringVibrateIntervalId) { clearInterval(ringVibrateIntervalId); ringVibrateIntervalId = null; }
+  if (navigator.vibrate) navigator.vibrate(0);
+  if (ringAudioCtx) { ringAudioCtx.close().catch(() => {}); ringAudioCtx = null; }
+}
+
+// ==================== SCREEN WAKE LOCK (call ke dauraan screen apne aap lock na ho) ====================
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch (err) { /* not supported ya permission denied — best-effort hai, chalta hai */ }
+}
+function releaseWakeLock() {
+  if (wakeLock) {
+    wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+}
+document.addEventListener('visibilitychange', async () => {
+  // Browsers wake lock apne aap release kar dete hain jab tab/app hidden hoti hai —
+  // dobara visible hone par, agar call chal rahi hai to wake lock wapas le lo.
+  if (document.visibilityState === 'visible' && peerConnection) {
+    await requestWakeLock();
+  }
+});
 
 const FILTERS = {
   none: 'none',
@@ -2513,6 +2609,7 @@ async function startCall(type) {
   await peerConnection.setLocalDescription(offer);
   socket.emit('callOffer', { toUsername: currentCallWith, offer, callType: type });
   showToast(`${currentCallWith} ko call kiya jaa raha hai...`);
+  startRingback();
   clearTimeout(ringTimeout);
   ringTimeout = setTimeout(() => {
     if (peerConnection && !callConnected) {
@@ -2530,8 +2627,16 @@ function setupPeerConnection() {
     }
   };
   peerConnection.ontrack = (event) => {
-    remoteVideo.srcObject = event.streams[0];
+    const stream = event.streams[0];
+    remoteVideo.srcObject = stream;
+    // FIX: audio call ke waqt videoGrid (jisme remoteVideo hai) display:none ho jaata hai,
+    // aur kai mobile browsers hidden <video> ka audio bhi rok dete hain — isliye awaaz
+    // ek alag, kabhi-hidden-na-hone-wale <audio> element se bhi chalate hain.
+    remoteAudio.srcObject = stream;
+    remoteAudio.muted = (currentCallType === 'video'); // video call me remoteVideo already sound de raha hai, double-audio se bacho
+    remoteAudio.play().catch(() => {});
     callConnected = true;
+    stopRingtone();
     clearTimeout(ringTimeout);
   };
   peerConnection.onconnectionstatechange = () => {
@@ -2543,8 +2648,11 @@ function setupPeerConnection() {
     } else if (state === 'disconnected') {
       clearTimeout(disconnectGraceTimeout);
       disconnectGraceTimeout = setTimeout(() => {
+        if (peerConnection && peerConnection.connectionState === 'disconnec} else if (state === 'disconnected') {
+      clearTimeout(disconnectGraceTimeout);
+      disconnectGraceTimeout = setTimeout(() => {
         if (peerConnection && peerConnection.connectionState === 'disconnected') endCall(false);
-      }, 6000);
+      }, 10000);
     } else if (['failed', 'closed'].includes(state)) {
       endCall(false);
     }
@@ -2561,10 +2669,12 @@ socket.on('callOffer', ({ fromUsername, offer, callType }) => {
   incomingCallText.textContent = `${fromUsername}`;
   incomingCallType.textContent = callType === 'video' ? '📹 Video Call aa rahi hai' : '📞 Audio Call aa rahi hai';
   incomingCallModal.classList.remove('hidden');
+  startIncomingRing();
 });
 
 acceptCallBtn.addEventListener('click', async () => {
   if (!pendingIncomingOffer) return;
+  stopRingtone();
   const { fromUsername, offer, callType } = pendingIncomingOffer;
   incomingCallModal.classList.add('hidden');
   currentCallWith = fromUsername;
@@ -2590,6 +2700,7 @@ acceptCallBtn.addEventListener('click', async () => {
 });
 
 rejectCallBtn.addEventListener('click', () => {
+  stopRingtone();
   if (pendingIncomingOffer) socket.emit('callReject', { toUsername: pendingIncomingOffer.fromUsername });
   pendingIncomingOffer = null;
   incomingCallModal.classList.add('hidden');
@@ -2597,6 +2708,7 @@ rejectCallBtn.addEventListener('click', () => {
 
 socket.on('callAnswer', async ({ answer }) => {
   if (!peerConnection) return;
+  stopRingtone();
   await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
   openCallUI();
 });
@@ -2628,6 +2740,7 @@ function updateCallTypeUI() {
     switchCallTypeBtn.textContent = '📞';
     switchCallTypeBtn.title = 'Audio call pe switch karo';
     if (localStream) localVideo.srcObject = localStream;
+    remoteAudio.muted = true; // remoteVideo dikh raha hai, wahi se sound aa raha hai — double na ho
   } else {
     videoGrid.classList.add('hidden');
     audioCallVisual.classList.remove('hidden');
@@ -2636,12 +2749,15 @@ function updateCallTypeUI() {
     switchCallTypeBtn.textContent = '📹';
     switchCallTypeBtn.title = 'Video call pe switch karo';
     audioAvatarInitial.textContent = getInitials(currentCallWith);
+    remoteAudio.muted = false; // videoGrid hidden hai — sound sirf remoteAudio se aayega
   }
 }
 
 function openCallUI() {
+  stopRingtone();
   activeCallOverlay.classList.remove('hidden');
   callWithName.textContent = currentCallWith;
+  requestWakeLock();
   updateCallTypeUI();
   callSeconds = 0;
   callTimer.textContent = '00:00';
@@ -2660,6 +2776,8 @@ function endCall(notifyOther) {
 }
 
 function cleanupCall() {
+  stopRingtone();
+  releaseWakeLock();
   clearTimeout(ringTimeout);
   clearTimeout(disconnectGraceTimeout);
   clearInterval(callTimerInterval);
@@ -2674,6 +2792,8 @@ function cleanupCall() {
     rawLocalStream = null;
   }
   localStream = null;
+  remoteAudio.srcObject = null;
+  remoteAudio.muted = false;
   currentCallWith = null;
   currentCallType = null;
   callConnected = false;
@@ -2712,22 +2832,30 @@ switchCallTypeBtn.addEventListener('click', async () => {
   const newType = currentCallType === 'video' ? 'audio' : 'video';
 
   try {
-    if (newType === 'video' && !rawLocalStream.getVideoTracks().length) {
-      const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const camTrack = camStream.getVideoTracks()[0];
-      rawLocalStream.addTrack(camTrack);
-    }
-
-    currentCallType = newType;
-    localStream = newType === 'video' ? startFilterProcessing(rawLocalStream) : rawLocalStream;
-
-    const videoTrack = localStream.getVideoTracks()[0];
     const sender = peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
-    if (newType === 'video' && videoTrack) {
-      if (sender) sender.replaceTrack(videoTrack);
+
+    if (newType === 'video') {
+      if (!rawLocalStream.getVideoTracks().length) {
+        const camStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const camTrack = camStream.getVideoTracks()[0];
+        rawLocalStream.addTrack(camTrack);
+      } else {
+        rawLocalStream.getVideoTracks().forEach((t) => { t.enabled = true; });
+      }
+      currentCallType = newType;
+      localStream = startFilterProcessing(rawLocalStream);
+      const videoTrack = localStream.getVideoTracks()[0];
+      if (sender) await sender.replaceTrack(videoTrack);
       else peerConnection.addTrack(videoTrack, localStream);
-    } else if (newType === 'audio' && !videoTrack) {
+    } else {
+      // FIX: pehle audio pe switch karne par bhi camera ka video track chupke se bhejta
+      // rehta tha (bandwidth waste + weak network pe audio stutter/cut ka reason ban sakta
+      // tha). Ab video sender ka track poori tarah hata dete hain aur filter processing
+      // (jo har frame canvas pe draw karta hai) bhi band kar dete hain.
+      currentCallType = newType;
       stopFilterProcessing();
+      localStream = rawLocalStream;
+      if (sender) await sender.replaceTrack(null);
     }
 
     updateCallTypeUI();
@@ -2764,9 +2892,9 @@ function updateAppHeight() {
   const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   document.documentElement.style.setProperty('--app-height', `${h}px`);
 }
+updateAppHeight();
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', updateAppHeight);
 } else {
   window.addEventListener('resize', updateAppHeight);
-}
-updateAppHeight();
+                                  }

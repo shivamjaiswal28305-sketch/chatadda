@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="/logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -57,10 +57,10 @@
       </div>
 
       <div class="my-profile-row">
-        <button id="myAvatarBtn" class="my-avatar-btn" title="Change your DP">
+        <button id="myAvatarBtn" class="my-avatar-btn" title="Apni profile dekho">
           <span id="myAvatarInitial">?</span>
         </button>
-        <span class="my-profile-label">Tap to change your DP</span>
+        <span class="my-profile-label">Tap to view your profile</span>
         <input id="avatarFileInput" type="file" accept="image/*" hidden>
       </div>
 
@@ -92,7 +92,9 @@
     <main class="chat-main">
       <header class="chat-header">
         <button id="menuBtn" class="menu-btn" aria-label="Users">☰</button>
-        <img id="headerAvatar" class="header-avatar hidden" alt="">
+        <button id="headerAvatarBtn" class="header-avatar-btn hidden" title="View profile">
+          <span id="headerAvatarInner"></span>
+        </button>
         <div class="header-title-wrap">
           <div class="header-title" id="headerTitle">ChatAdda</div>
           <div class="header-subtitle" id="headerSubtitle"></div>
@@ -196,6 +198,48 @@
         <span class="recording-dot"></span>
         <span id="recordingTimer">0:00</span>
         <span class="recording-hint">Chhodo bhejne ke liye • Slide left cancel karne ke liye</span>
+      </div>
+
+      <!-- Profile view (DP tap karne se khulta hai — WhatsApp jaisa) -->
+      <div id="profileOverlay" class="profile-overlay hidden">
+        <div class="profile-card">
+          <div class="profile-card-header">
+            <button id="profileCloseBtn" class="profile-close-btn" aria-label="Band karo">←</button>
+            <span id="profileHeaderLabel">Profile</span>
+          </div>
+
+          <div class="profile-avatar-wrap">
+            <button id="profileAvatarBtn" class="profile-avatar-btn" title="DP badlo">
+              <span id="profileAvatarInner"></span>
+              <span id="profileAvatarEditBadge" class="profile-avatar-edit-badge hidden">📷</span>
+            </button>
+          </div>
+
+          <h2 id="profileUsername" class="profile-username"></h2>
+          <p id="profileStatusLine" class="profile-status-line"></p>
+
+          <div class="profile-section">
+            <span class="profile-section-label">About</span>
+            <p id="profileAboutText" class="profile-about-text"></p>
+            <textarea id="profileAboutInput" class="profile-about-input hidden" maxlength="140" placeholder="Apne baare mein kuch likho..."></textarea>
+            <div id="profileAboutEditRow" class="profile-about-edit-row hidden">
+              <button type="button" id="profileAboutCancelBtn">Cancel</button>
+              <button type="button" id="profileAboutSaveBtn">Save</button>
+            </div>
+            <button type="button" id="profileAboutEditBtn" class="profile-edit-link hidden">✏️ Edit</button>
+          </div>
+
+          <div class="profile-section">
+            <span class="profile-section-label">Media, Links and Docs</span>
+            <div id="profileMediaGrid" class="profile-media-grid"></div>
+            <p id="profileMediaEmpty" class="profile-media-empty hidden">Abhi tak koi photo share nahi hui</p>
+          </div>
+
+          <div id="profileOtherActions" class="profile-other-actions hidden">
+            <button type="button" id="profileBlockBtn" class="profile-action-btn">🚫 Block</button>
+            <button type="button" id="profileReportBtn" class="profile-action-btn">⚠️ Report</button>
+          </div>
+        </div>
       </div>
 
       <!-- Manual contact entry (fallback jab Contact Picker support nahi karta) -->
@@ -397,6 +441,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="client.js?v=7"></script>
+  <script src="client.js?v=8"></script>
 </body>
 </html>

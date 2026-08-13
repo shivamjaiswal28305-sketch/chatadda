@@ -468,11 +468,18 @@ body.dark-mode .attach-menu-item:hover { background: #182229; }
 .audio-call-visual { flex: 1; display: flex; align-items: center; justify-content: center; }
 .audio-call-visual.hidden { display: none; }
 .audio-avatar {
-  width: 130px; height: 130px; border-radius: 50%;
+  width: 150px; height: 150px; border-radius: 50%;
   background: rgba(255,255,255,0.12);
   display: flex; align-items: center; justify-content: center;
-  font-size: 46px; font-weight: 700; color: #fff;
+  font-size: 50px; font-weight: 700; color: #fff;
   border: 2px solid rgba(255,255,255,0.3);
+  overflow: hidden;
+}
+.audio-avatar img.mini-avatar { width: 100%; height: 100%; }
+.audio-avatar .mini-avatar-initial { width: 100%; height: 100%; font-size: 50px; background: transparent; border: none; }
+.call-status-text {
+  text-align: center; color: rgba(255,255,255,0.75);
+  font-size: 15px; margin-top: 6px;
 }
 
 .call-controls {

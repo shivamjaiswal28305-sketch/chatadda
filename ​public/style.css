@@ -727,11 +727,98 @@ body.dark-mode .msg-actions { background: #233138; }
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 14px;
 }
-.header-avatar {
+.header-avatar-btn {
   width: 38px; height: 38px; border-radius: 50%;
-  object-fit: cover; flex-shrink: 0;
+  flex-shrink: 0; border: none; padding: 0; cursor: pointer;
+  overflow: hidden; background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
 }
-.header-avatar.hidden { display: none; }
+.header-avatar-btn.hidden { display: none; }
+.header-avatar-btn img.mini-avatar { width: 100%; height: 100%; }
+.header-avatar-btn .mini-avatar-initial { width: 100%; height: 100%; font-size: 15px; }
+
+/* ==================== PROFILE VIEW (WhatsApp-style DP tap) ==================== */
+.profile-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: #fff; overflow-y: auto;
+}
+body.dark-mode .profile-overlay { background: #111b21; }
+.profile-overlay.hidden { display: none; }
+.profile-card { max-width: 480px; margin: 0 auto; padding-bottom: 40px; }
+.profile-card-header {
+  display: flex; align-items: center; gap: 20px;
+  padding: 16px; background: var(--accent); color: #fff;
+  position: sticky; top: 0; z-index: 2;
+}
+.profile-close-btn {
+  background: none; border: none; color: #fff;
+  font-size: 22px; cursor: pointer; padding: 4px;
+}
+.profile-avatar-wrap { display: flex; justify-content: center; padding: 32px 16px 8px; }
+.profile-avatar-btn {
+  width: 160px; height: 160px; border-radius: 50%;
+  border: none; padding: 0; cursor: default; position: relative;
+  overflow: hidden; background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+}
+.profile-avatar-btn img.mini-avatar { width: 100%; height: 100%; }
+.profile-avatar-btn .mini-avatar-initial { width: 100%; height: 100%; font-size: 56px; }
+.profile-avatar-edit-badge {
+  position: absolute; bottom: 6px; right: 6px;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(0,0,0,0.55); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; pointer-events: none;
+}
+.profile-avatar-btn.editable { cursor: pointer; }
+.profile-username {
+  text-align: center; font-size: 20px; font-weight: 700;
+  margin: 12px 0 2px; word-break: break-word;
+}
+.profile-status-line { text-align: center; font-size: 13px; color: #667781; margin-bottom: 16px; }
+.profile-section {
+  padding: 16px 24px; border-top: 8px solid #f0f2f5;
+}
+body.dark-mode .profile-section { border-top-color: #202c33; }
+.profile-section-label {
+  display: block; font-size: 13px; font-weight: 600;
+  color: var(--accent); margin-bottom: 8px;
+}
+.profile-about-text { font-size: 15px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+.profile-about-input {
+  width: 100%; min-height: 70px; resize: vertical;
+  border: 1px solid #d1d7db; border-radius: 8px; padding: 8px 10px;
+  font-family: inherit; font-size: 14px;
+}
+.profile-about-input.hidden, .profile-about-edit-row.hidden, .profile-edit-link.hidden { display: none; }
+.profile-about-edit-row { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.profile-about-edit-row button {
+  border: none; background: none; color: var(--accent);
+  font-weight: 600; font-size: 14px; cursor: pointer; padding: 6px 10px;
+}
+.profile-edit-link {
+  border: none; background: none; color: var(--accent);
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  padding: 6px 0 0; display: block;
+}
+.profile-media-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+}
+.profile-media-grid img {
+  width: 100%; aspect-ratio: 1; object-fit: cover;
+  border-radius: 6px; cursor: pointer;
+}
+.profile-media-empty { font-size: 13px; color: #8696a0; }
+.profile-other-actions { padding: 8px 0 0; }
+.profile-action-btn {
+  display: block; width: 100%; text-align: left;
+  padding: 16px 24px; border: none; background: none;
+  font-size: 15px; cursor: pointer; color: #e53935;
+  border-top: 8px solid #f0f2f5;
+}
+body.dark-mode .profile-action-btn { border-top-color: #202c33; color: #ff6b6b; }
+.profile-action-btn.blocked-state { color: var(--accent); }
+body.dark-mode .profile-action-btn.blocked-state { color: var(--accent); }
 
 /* FIX: header-title-wrap ko min-width:0 diya taaki flex container ke andar
    lambe naam/text overflow ho kar dusre elements ke upar na chadhein. */

@@ -206,7 +206,7 @@ app.get('/api/messages/:room', requireAuth, async (req, res) => {
 // All registered users (for contacts/search + profile photo/last seen cache) — login zaroori hai
 app.get('/api/users', requireAuth, async (req, res) => {
   try {
-    const users = await User.find({}, 'username isOnline lastSeen photoUrl').lean();
+    const users = await User.find({}, 'username isOnline lastSeen photoUrl about').lean();
     res.json(users);
   } catch (err) {
     res.status(500).json({ error: 'Users load nahi ho paye' });
@@ -265,6 +265,33 @@ app.post('/api/users/photo', async (req, res) => {
     res.json({ photoUrl: user.photoUrl });
   } catch (err) {
     res.status(500).json({ error: 'DP update fail hua' });
+  }
+});
+
+// Apna "About" (bio) text update karo — WhatsApp jaisa profile bio
+app.post('/api/users/about', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '').trim();
+    const payload = verifyToken(token);
+    if (!payload) return res.status(401).json({ error: 'Session expire ho gaya, dobara login karo' });
+
+    const about = String(req.body.about || '').slice(0, 140).trim();
+    const user = await User.findByIdAndUpdate(payload.userId, { about }, { new: true });
+    if (!user) return res.status(404).json({ error: 'User nahi mila' });
+
+    // Sabko turant naya About text dikhao (jo bhi profile khula ho unke liye)
+    io.emit('presenceUpdate', {
+      username: user.username,
+      isOnline: user.isOnline,
+      lastSeen: user.lastSeen,
+      photoUrl: user.photoUrl,
+      about: user.about
+    });
+
+    res.json({ about: user.about });
+  } catch (err) {
+    res.status(500).json({ error: 'About update fail hua' });
   }
 });
 
@@ -357,7 +384,7 @@ io.on('connection', (socket) => {
 
     socket.emit('joined', user.username);
     // Global presence: iske contacts/private-chat wale sab jagah "Online" dikhega, sirf Adda Room ke andar nahi
-    io.emit('presenceUpdate', { username: user.username, isOnline: true, lastSeen: user.lastSeen, photoUrl: user.photoUrl });
+    io.emit('presenceUpdate', { username: user.username, isOnline: true, lastSeen: user.lastSeen, photoUrl: user.photoUrl, about: user.about });
     // NOTE: yahan koi 'system' broadcast ya 'userList' emit nahi hota — silent hai
   });
 

@@ -33,6 +33,11 @@ const userSchema = new mongoose.Schema({
   photoUrl: {
     type: String,
     default: ''
+  },
+  about: {
+    type: String,
+    default: 'Hey there! I am using ChatAdda.',
+    maxlength: 140
   }
 }, { timestamps: true });
 
